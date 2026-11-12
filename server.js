@@ -4,15 +4,25 @@ const path = require('path');
 const os = require('os');
 const auth = require('./src/auth');
 
+// Que todo archivo/carpeta nuevo nazca privado: 600 para archivos, 700 para carpetas.
+try { process.umask(0o077); } catch (e) { }
+
 const PORT = 8000;   // HTTP  (fallback)
 const DIRECTORY = path.join(__dirname, 'registros');
 const REPORTES_DIR = path.join(__dirname, 'inventarios base de datos');
 const AVATARS_DIR = path.join(DIRECTORY, 'avatars');
 
-// Crear la carpeta si no existe
-if (!fs.existsSync(DIRECTORY)) fs.mkdirSync(DIRECTORY, { recursive: true });
-if (!fs.existsSync(REPORTES_DIR)) fs.mkdirSync(REPORTES_DIR, { recursive: true });
-if (!fs.existsSync(AVATARS_DIR)) fs.mkdirSync(AVATARS_DIR, { recursive: true });
+// Crear las carpetas con permisos de dueño (700) si no existen
+function ensureSecureDir(dir) {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    try { fs.chmodSync(dir, 0o700); } catch (e) { }
+}
+
+ensureSecureDir(DIRECTORY);
+ensureSecureDir(REPORTES_DIR);
+ensureSecureDir(AVATARS_DIR);
 
 const SESSION_CONTROL_FILE = path.join(DIRECTORY, 'session_control.json');
 let sessionControl = { global_logout: 0, kicked_users: {} };
@@ -253,6 +263,64 @@ function timestampNow() {
         String(now.getSeconds()).padStart(2, '0');
 }
 
+/** Aplica 700 a las carpetas de datos y 600 a todos sus archivos. */
+function securePermissions() {
+    const walk = (dir) => {
+        if (!fs.existsSync(dir)) return;
+        try { fs.chmodSync(dir, 0o700); } catch (e) { }
+
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+
+        for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(full);
+            } else {
+                try { fs.chmodSync(full, 0o600); } catch (e) { }
+            }
+        }
+    };
+
+    walk(DIRECTORY);
+    walk(REPORTES_DIR);
+    walk(path.join(__dirname, 'reportes_enviados'));
+}
+
+/**
+ * Convierte a hash las contraseñas en texto plano que queden en registros/.
+ * Se ejecuta al arrancar, para que nadie dependa de haber iniciado sesión.
+ */
+function migratePlaintextPasswords() {
+    let migrated = 0;
+    let weak = 0;
+
+    for (const user of readUsers()) {
+        if (!user.password || auth.isHashed(user.password)) continue;
+
+        const plano = String(user.password);
+        if (plano === String(user.cedula) || plano.length < 6) weak += 1;
+
+        try {
+            const file = user.__file;
+            const filepath = path.join(DIRECTORY, file || '');
+            if (!file || !isInside(DIRECTORY, filepath)) continue;
+
+            user.password_hash = auth.hashPassword(plano);
+            delete user.password;
+            delete user.__file;
+
+            fs.writeFileSync(filepath, JSON.stringify(user, null, 4), { encoding: 'utf8', mode: 0o600 });
+            try { fs.chmodSync(filepath, 0o600); } catch (e) { }
+            migrated += 1;
+        } catch (e) {
+            console.error(`No se pudo migrar la contraseña de ${user.cedula}:`, e.message);
+        }
+    }
+
+    return { migrated, weak };
+}
+
 /** Sesión activa de la petición, respetando los cierres remotos del panel. */
 function currentSession(req) {
     const cookies = auth.parseCookies(req.headers.cookie);
@@ -448,6 +516,53 @@ const requestHandler = (req, res) => {
                 user: { cedula: session.cedula, nombre: session.nombre, role: session.role }
             });
         }
+
+    } else if (req.method === 'POST' && req.url === '/api/change-password') {
+        readJsonBody(req, res, (data) => {
+            const actual = String(data.actual || '');
+            const nueva = String(data.nueva || '');
+
+            if (!actual || !nueva) {
+                sendJson(res, 400, { status: 'error', message: 'Completá la contraseña actual y la nueva' });
+                return;
+            }
+            if (nueva.length < 6) {
+                sendJson(res, 400, { status: 'error', message: 'La nueva contraseña debe tener al menos 6 caracteres' });
+                return;
+            }
+            if (nueva === actual) {
+                sendJson(res, 400, { status: 'error', message: 'La nueva contraseña debe ser distinta de la actual' });
+                return;
+            }
+
+            const user = findUserByCedula(session.cedula);
+            const stored = user ? (user.password_hash || user.password) : null;
+            if (!user || !auth.verifyPassword(actual, stored)) {
+                sendJson(res, 401, { status: 'error', message: 'La contraseña actual no es correcta' });
+                return;
+            }
+
+            try {
+                const file = user.__file;
+                const filepath = path.join(DIRECTORY, file || '');
+                if (!file || !isInside(DIRECTORY, filepath)) throw new Error('Ruta inválida');
+
+                user.password_hash = auth.hashPassword(nueva);
+                delete user.password;
+                delete user.__file;
+
+                fs.writeFileSync(filepath, JSON.stringify(user, null, 4), { encoding: 'utf8', mode: 0o600 });
+                try { fs.chmodSync(filepath, 0o600); } catch (e) { }
+
+                // Cerrar las demás sesiones y renovar la de este dispositivo.
+                auth.destroySessionsForUser(session.cedula);
+                const token = auth.createSession(user);
+                res.setHeader('Set-Cookie', auth.sessionCookie(token));
+                sendJson(res, 200, { status: 'success', message: 'Contraseña actualizada' });
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: e.message });
+            }
+        });
 
     } else if (req.method === 'GET' && req.url === '/api/listar-reportes') {
         let reportes = [];
@@ -1008,7 +1123,7 @@ const requestHandler = (req, res) => {
                 const rawAisleName = data.aisleName || 'Pasillo';
                 const folderName = getFolderName(rawAisleName);
                 const targetDir = path.join(REPORTES_DIR, folderName);
-                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+                ensureSecureDir(targetDir);
 
                 const filepath = path.join(targetDir, filename);
                 if (!isInside(REPORTES_DIR, filepath)) throw new Error('Ruta inválida');
@@ -1123,7 +1238,7 @@ const requestHandler = (req, res) => {
 
                 const folderName = getFolderName(aisleName);
                 const targetDir = path.join(REPORTES_DIR, folderName);
-                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+                ensureSecureDir(targetDir);
 
                 const xlsxPath = path.join(targetDir, filename);
                 if (!isInside(REPORTES_DIR, xlsxPath)) throw new Error('Ruta inválida');
@@ -1311,6 +1426,16 @@ const requestHandler = (req, res) => {
         serveStatic(req, res);
     }
 };
+
+// ── Migración de datos y permisos al arrancar ───────────────────────────────
+try {
+    const { migrated, weak } = migratePlaintextPasswords();
+    if (migrated > 0) console.log(`  🔐 Contraseñas migradas a hash: ${migrated}`);
+    if (weak > 0) console.log(`  ⚠️  ${weak} contraseña(s) débil(es) al migrar: recomendá cambiarlas.`);
+} catch (e) {
+    console.error('Error migrando contraseñas:', e.message);
+}
+securePermissions();
 
 // ── Servidores ──────────────────────────────────────────────────────────────
 const httpServer = http.createServer(requestHandler);

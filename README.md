@@ -63,6 +63,9 @@ Estado actual del proyecto:
 | Cabeceras de seguridad | ✅ `nosniff`, `DENY`, `no-referrer` (`SEC-12`) |
 | Autenticación y autorización en el servidor | ✅ sesión + roles (`SEC-01`, `SEC-02`, `SEC-07`, `SEC-08`) |
 | Contraseñas | ✅ scrypt en reposo; nunca se envían al cliente (`SEC-06`) |
+| Migración de claves viejas | ✅ a hash al arrancar y al primer login |
+| Permisos de los datos | ✅ carpetas `700`, archivos `600` |
+| Cambio de contraseña | ✅ desde el perfil, con la clave actual |
 | Cifrado en tránsito | ❌ HTTP plano en la red local |
 | Productos en código ejecutable | ❌ pendiente (`SEC-04`) |
 | XSS en el panel | ❌ pendiente (`SEC-09`) |
@@ -77,7 +80,13 @@ Estado actual del proyecto:
   exigen rol `admin` en el servidor.
 - Hay límite de 5 intentos fallidos por cédula y IP cada 5 minutos.
 - Las contraseñas en texto plano de versiones anteriores se convierten a hash
-  (`scrypt`) automáticamente la primera vez que cada usuario inicia sesión.
+  (`scrypt`) automáticamente al arrancar el servidor y también la primera vez
+  que cada usuario inicia sesión.
+- Cada usuario puede cambiar su contraseña desde **Mi Perfil → Cambiar
+  contraseña**; el servidor pide la clave actual y cierra las demás sesiones.
+- `registros/`, `inventarios base de datos/` y `reportes_enviados/` quedan con
+  permisos `700` (carpetas) y `600` (archivos): solo el usuario que corre el
+  servidor puede leerlos. Los archivos nuevos nacen con esos permisos.
 
 **No exponer la aplicación a Internet** mientras use HTTP plano. Para uso en red
 local, limitar el acceso a una VLAN o SSID de confianza.

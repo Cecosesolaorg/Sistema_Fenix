@@ -321,6 +321,45 @@ function cerrarModalPerfil() {
     fotoPerfilTemporal = null;
 }
 
+// ─── CAMBIO DE CONTRASEÑA ───
+function toggleCambioClave() {
+    const box = document.getElementById('cambio-clave-box');
+    if (!box) return;
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function cambiarClave() {
+    const actual = document.getElementById('clave-actual').value;
+    const nueva = document.getElementById('clave-nueva').value;
+    const repetida = document.getElementById('clave-nueva2').value;
+    const msg = document.getElementById('clave-msg');
+
+    const aviso = (texto, ok) => {
+        msg.textContent = texto;
+        msg.style.color = ok ? '#1b7f4b' : '#c0392b';
+    };
+
+    if (!actual || !nueva || !repetida) return aviso('Completá los tres campos.', false);
+    if (nueva.length < 6) return aviso('La nueva contraseña debe tener al menos 6 caracteres.', false);
+    if (nueva !== repetida) return aviso('Las contraseñas nuevas no coinciden.', false);
+    if (nueva === actual) return aviso('La nueva debe ser distinta de la actual.', false);
+
+    fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actual, nueva })
+    })
+        .then(async (response) => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return aviso(data.message || 'No se pudo cambiar la contraseña.', false);
+            aviso('Contraseña actualizada correctamente.', true);
+            document.getElementById('clave-actual').value = '';
+            document.getElementById('clave-nueva').value = '';
+            document.getElementById('clave-nueva2').value = '';
+        })
+        .catch(() => aviso('No se pudo conectar con el servidor.', false));
+}
+
 function procesarFoto(input) {
     const file = input.files[0];
     if (!file) return;
