@@ -1,0 +1,38 @@
+# Datos de la aplicación — NUNCA versionar
+registros/
+registros/avatars/
+inventarios base de datos/
+reportes_enviados/
+avatars/
+
+# JSON de datos generados en runtime
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Hojas de cálculo y exportaciones
+*.xlsx
+*.xls
+*.csv
+
+# Node portable y binarios
+tools/
+node_modules/
+*.exe
+
+# Backups y comprimidos
+*.zip
+*.7z
+*.rar
+*.tar.gz
+*.tgz
+
+# Sistema operativo y editores
+desktop.ini
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
