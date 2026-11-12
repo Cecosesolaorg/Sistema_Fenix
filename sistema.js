@@ -134,7 +134,7 @@ function renderizarReportes() {
                 <i class="fa-solid fa-folder" id="${dateId}-icon" style="color: white; font-size: 1.4rem;"></i>
             </div>
             <div style="flex: 1;">
-                <div style="font-weight: 900; font-size: 1.15rem; color: #673ab7;">${dateGroup.dateTitle}</div>
+                <div style="font-weight: 900; font-size: 1.15rem; color: #673ab7;">${esc(dateGroup.dateTitle)}</div>
                 <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-top: 3px;">
                     <i class="fa-solid fa-layer-group" style="margin-right: 4px;"></i>${Object.keys(dateGroup.aisles).length} Pasillos &nbsp;•&nbsp; <i class="fa-solid fa-file-excel" style="margin-right: 4px; color:#27ae60;"></i>${totalFiles} Archivos
                 </div>
@@ -179,7 +179,7 @@ function renderizarReportes() {
                 <div style="width: 38px; height: 38px; border-radius: 8px; background: linear-gradient(135deg, #fff3e0, #ffe0b2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                     <i class="fa-solid fa-folder" id="${aisleId}-icon" style="color: #f39c12; font-size: 1.1rem;"></i>
                 </div>
-                <div style="flex: 1; font-weight: 800; font-size: 0.95rem; color: var(--text-color);">${aisleGroup.title}</div>
+                <div style="flex: 1; font-weight: 800; font-size: 0.95rem; color: var(--text-color);">${esc(aisleGroup.title)}</div>
                 <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
                     <span style="background: rgba(46,204,113,0.12); color: #27ae60; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">
                         <i class="fa-solid fa-file-excel" style="margin-right: 3px;"></i>${aisleGroup.reports.length} archivo${aisleGroup.reports.length > 1 ? 's' : ''}
@@ -228,7 +228,7 @@ function renderizarReportes() {
                     </div>
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            ${fileName}
+                            ${esc(fileName)}
                         </div>
                         <div style="font-size: 0.72rem; color: var(--text-muted);">
                             <i class="fa-regular fa-clock" style="margin-right: 3px;"></i>${timeStr}
@@ -304,12 +304,12 @@ async function abrirModalComparar() {
         const dB = new Date(repB.fecha_iso || repB.fecha || 0);
 
         document.getElementById('compare-rep-a-info').innerHTML = `
-                    <i class="fa-regular fa-calendar"></i> ${dA.toLocaleString()}<br>
-                    <i class="fa-solid fa-user"></i> ${repA.responsable || repA.usuario || 'Desconocido'}
+                    <i class="fa-regular fa-calendar"></i> ${esc(dA.toLocaleString())}<br>
+                    <i class="fa-solid fa-user"></i> ${esc(repA.responsable || repA.usuario || 'Desconocido')}
                 `;
         document.getElementById('compare-rep-b-info').innerHTML = `
-                    <i class="fa-regular fa-calendar"></i> ${dB.toLocaleString()}<br>
-                    <i class="fa-solid fa-user"></i> ${repB.responsable || repB.usuario || 'Desconocido'}
+                    <i class="fa-regular fa-calendar"></i> ${esc(dB.toLocaleString())}<br>
+                    <i class="fa-solid fa-user"></i> ${esc(repB.responsable || repB.usuario || 'Desconocido')}
                 `;
 
         // Actualizar cabeceras de la tabla con los nombres
@@ -345,7 +345,7 @@ async function abrirModalComparar() {
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                        <td style="font-weight: 600;">${prodName}</td>
+                        <td style="font-weight: 600;">${esc(prodName)}</td>
                         <td style="text-align: center;">${qtyA}</td>
                         <td style="text-align: center;">${qtyB}</td>
                         <td style="text-align: center;">${diffHtml}</td>
@@ -725,7 +725,7 @@ window.renderHistorialFiltrado = function (filtro = 'todos') {
                         <td colspan="4" style="padding: 12px 16px; border-bottom: 2px solid rgba(103,58,183,0.2);">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <i class="fa-solid fa-layer-group" style="color: #673ab7; font-size: 1.1rem;"></i>
-                                <strong style="font-size: 1rem; color: var(--text-color);">${nombreGrupo}</strong>
+                                <strong style="font-size: 1rem; color: var(--text-color);">${esc(nombreGrupo)}</strong>
                                 <span style="background: white; border: 1px solid rgba(103,58,183,0.2); padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; color: #673ab7;">${eventosGrupo.length}</span>
                             </div>
                         </td>
@@ -777,15 +777,15 @@ function generarFilaHistorial(evento, index) {
                 <td>
                     <div style="display:flex; align-items:center; gap:10px;">
                         <div style="width:36px; height:36px; border-radius:50%; background: linear-gradient(135deg, #1a237e, #3949ab); display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.9rem; flex-shrink:0;">
-                            ${inicial}
+                            ${esc(inicial)}
                         </div>
-                        <span style="font-weight:600;">${evento.usuario || 'Desconocido'}</span>
+                        <span style="font-weight:600;">${esc(evento.usuario || 'Desconocido')}</span>
                     </div>
                 </td>
                 <td>
                     <span style="display:inline-flex; align-items:center; gap:6px; padding: 4px 12px; border-radius: 20px; background: rgba(0,0,0,0.05); font-weight: 600; font-size: 0.85rem;">
                         <i class="fa-solid ${accionIcon}" style="color: ${accionColor};"></i>
-                        ${evento.accion || '—'}
+                        ${esc(evento.accion || '—')}
                     </span>
                 </td>
                 <td style="color: var(--text-muted); font-size: 0.85rem;">${fecha}</td>
@@ -961,7 +961,7 @@ function renderPasillosView() {
         headerDiv.innerHTML = `
                     <i class="fa-solid fa-chevron-right" id="${headerId}-chevron" style="transition: transform 0.2s; color: var(--text-muted); font-size: 0.8rem;"></i>
                     <i class="fa-solid fa-layer-group" style="color:var(--primary-green);font-size:1.1rem;"></i>
-                    <span id="name-display-${key.replace(/\W/g, '_')}" style="font-size:1.05rem;font-weight:800;flex:1;">${displayName}</span>
+                    <span id="name-display-${key.replace(/\W/g, '_')}" style="font-size:1.05rem;font-weight:800;flex:1;">${esc(displayName)}</span>
                     <span style="font-size:0.78rem;background:rgba(103,58,183,0.1);color:#673ab7;padding:3px 10px;border-radius:20px;font-weight:600;">${allProducts.length} productos</span>
                     <span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;font-weight:700;${enabled ? 'background:rgba(46,204,113,0.15);color:#27ae60;' : 'background:rgba(231,76,60,0.15);color:#e74c3c;'}" id="badge-status-${key.replace(/\W/g, '_')}">
                         ${enabled ? '✓ Habilitado' : '🚫 Deshabilitado'}
@@ -981,7 +981,7 @@ function renderPasillosView() {
                     <button onclick="toggleHabilitarPasillo('${key}')" id="btn-toggle-${key.replace(/\W/g, '_')}" style="background:${enabled ? 'rgba(231,76,60,0.1)' : 'rgba(46,204,113,0.1)'};color:${enabled ? '#e74c3c' : '#27ae60'};border:1px solid ${enabled ? 'rgba(231,76,60,0.3)' : 'rgba(46,204,113,0.3)'};padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
                         <i class="fa-solid ${enabled ? 'fa-ban' : 'fa-check'}"></i> ${enabled ? 'Deshabilitar' : 'Habilitar'}
                     </button>
-                    <button onclick="cerrarInventarioPasillo('${key}', '${displayName}')" style="background:rgba(231,76,60,0.1);color:#e74c3c;border:1px solid rgba(231,76,60,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
+                    <button data-key="${esc(key)}" data-nombre="${esc(displayName)}" onclick="cerrarInventarioPasillo(this.dataset.key, this.dataset.nombre)" style="background:rgba(231,76,60,0.1);color:#e74c3c;border:1px solid rgba(231,76,60,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
                         <i class="fa-solid fa-lock"></i> Cerrar e Inicializar a 0
                     </button>
                 `;
@@ -1018,7 +1018,7 @@ function renderPasillosView() {
                             <tr id="prod-row-${key.replace(/\W/g, '_')}-${idx}">
                                 <td style="width:50px;color:var(--text-muted);font-size:0.8rem;">#${idx + 1}</td>
                                 <td>
-                                    <strong>${displayProd}</strong>
+                                    <strong>${esc(displayProd)}</strong>
                                     ${isExtra ? ' <span style="font-size:0.7rem;background:rgba(103,58,183,0.15);color:#673ab7;padding:1px 6px;border-radius:10px;margin-left:6px;">nuevo</span>' : ''}
                                 </td>
                                 <td style="width:80px;text-align:right;">
@@ -1176,7 +1176,7 @@ function mostrarNotifProductoNuevo(nombre, pasilloKey) {
                     <div>
                         <p style="margin:0 0 4px;color:#f0c040;font-weight:800;font-size:0.95rem;">Producto no encontrado en el catálogo</p>
                         <p style="margin:0;color:#ccc;font-size:0.85rem;">
-                            <strong style="color:#fff;">${nombre}</strong> no aparece en el inventario.<br>¿Deseas agregarlo al catálogo del pasillo?
+                            <strong style="color:#fff;">${esc(nombre)}</strong> no aparece en el inventario.<br>¿Deseas agregarlo al catálogo del pasillo?
                         </p>
                     </div>
                 </div>
@@ -1393,10 +1393,10 @@ async function actualizarKpisDashboard() {
                 pasillosInfo.forEach(info => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                                <td style="font-weight: 600; font-size: 0.95rem;">${info.pasillo}</td>
+                                <td style="font-weight: 600; font-size: 0.95rem;">${esc(info.pasillo)}</td>
                                 <td><span class="badge-type" style="background: rgba(103, 58, 183, 0.1); color: #673ab7; font-size: 0.85rem; padding: 6px 12px; border-radius: 8px;">${info.cantidad} informes</span></td>
                                 <td><span style="font-weight: 600; color: var(--text-muted);"><i class="fa-solid fa-users" style="margin-right: 5px;"></i>${info.usuariosCount}</span></td>
-                                <td style="color: var(--text-muted); font-size: 0.85rem;">${info.ultimo}</td>
+                                <td style="color: var(--text-muted); font-size: 0.85rem;">${esc(info.ultimo)}</td>
                             `;
                     dashboardTable.appendChild(tr);
                 });
@@ -1472,8 +1472,8 @@ function mostrarNotificacionPendiente(prod) {
             <div style="flex:1;">
                 <p style="margin:0 0 4px;color:#3498db;font-weight:800;font-size:0.95rem;">Nuevo producto sugerido</p>
                 <p style="margin:0;color:#ccc;font-size:0.85rem;line-height:1.4;">
-                    Desde <strong>${pasilloNombre}</strong> quieren añadir:<br>
-                    <strong style="color:#fff;">${prod.name}</strong>
+                    Desde <strong>${esc(pasilloNombre)}</strong> quieren añadir:<br>
+                    <strong style="color:#fff;">${esc(prod.name)}</strong>
                 </p>
                 <p style="margin:6px 0 0;color:#aaa;font-size:0.75rem;font-weight:700;">¿Deseas agregarlo permanentemente?</p>
             </div>
@@ -1636,35 +1636,35 @@ function construirTablaDeposito(tableId, productos, depositKey, savedData) {
         tr.className = 'dep-data-row';
         tr.innerHTML = `
             <td style="color: var(--text-muted); font-size: 0.85rem;">${index + 1}</td>
-            <td style="font-weight: 700; color: var(--text-color); font-size: 0.9rem;">${prod}</td>
+            <td style="font-weight: 700; color: var(--text-color); font-size: 0.9rem;">${esc(prod)}</td>
             <td style="padding: 4px; text-align:center;">
-                <input type="text" class="dep-input-txt" data-field="unidad" data-prod="${prod}" value="${pData.unidad || ''}" placeholder="Ej: CAJA" style="${inputStyle}">
+                <input type="text" class="dep-input-txt" data-field="unidad" data-prod="${esc(prod)}" value="${esc(pData.unidad || '')}" placeholder="Ej: CAJA" style="${inputStyle}">
             </td>
             <td style="padding: 4px; text-align:center;">
-                <input type="text" class="dep-input" data-field="inicial" data-prod="${prod}" value="${pData.inicial}" data-lastval="${pData.inicial}" placeholder="Ej: 5+2" style="${inputStyle}">
-                <input type="hidden" class="dep-hist-data" data-histfield="inicial" value='${safeIni}'>
+                <input type="text" class="dep-input" data-field="inicial" data-prod="${esc(prod)}" value="${esc(pData.inicial)}" data-lastval="${esc(pData.inicial)}" placeholder="Ej: 5+2" style="${inputStyle}">
+                <input type="hidden" class="dep-hist-data" data-histfield="inicial" value='${esc(safeIni)}'>
                 <button type="button" class="btn-historial" onclick="verHistorialFicha(this)" style="display:${safeIni !== '[]' ? 'inline-block' : 'none'}; background:#27ae60; color:white; border:none; border-radius:4px; font-size:0.6rem; padding: 2px 6px; margin-top:4px; cursor:pointer;" title="Ver historial"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
             </td>
             <td style="padding: 4px; text-align:center;">
-                <input type="text" class="dep-input" data-field="recargo" data-prod="${prod}" value="${pData.recargo}" data-lastval="${pData.recargo}" style="${inputStyle}">
-                <input type="hidden" class="dep-hist-data" data-histfield="recargo" value='${safeRec}'>
+                <input type="text" class="dep-input" data-field="recargo" data-prod="${esc(prod)}" value="${esc(pData.recargo)}" data-lastval="${esc(pData.recargo)}" style="${inputStyle}">
+                <input type="hidden" class="dep-hist-data" data-histfield="recargo" value='${esc(safeRec)}'>
                 <button type="button" class="btn-historial" onclick="verHistorialFicha(this)" style="display:${safeRec !== '[]' ? 'inline-block' : 'none'}; background:#27ae60; color:white; border:none; border-radius:4px; font-size:0.6rem; padding: 2px 6px; margin-top:4px; cursor:pointer;" title="Ver historial"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
             </td>
             <td style="padding: 4px; text-align:center;">
-                <input type="text" class="dep-input" data-field="directo" data-prod="${prod}" value="${pData.directo}" data-lastval="${pData.directo}" style="${inputStyle}">
-                <input type="hidden" class="dep-hist-data" data-histfield="directo" value='${safeDir}'>
+                <input type="text" class="dep-input" data-field="directo" data-prod="${esc(prod)}" value="${esc(pData.directo)}" data-lastval="${esc(pData.directo)}" style="${inputStyle}">
+                <input type="hidden" class="dep-hist-data" data-histfield="directo" value='${esc(safeDir)}'>
                 <button type="button" class="btn-historial" onclick="verHistorialFicha(this)" style="display:${safeDir !== '[]' ? 'inline-block' : 'none'}; background:#27ae60; color:white; border:none; border-radius:4px; font-size:0.6rem; padding: 2px 6px; margin-top:4px; cursor:pointer;" title="Ver historial"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
             </td>
             <td style="padding: 4px; text-align:center;">
-                <input type="text" class="dep-input" data-field="sacado" data-prod="${prod}" value="${pData.sacado}" data-lastval="${pData.sacado}" style="${inputStyle}">
-                <input type="hidden" class="dep-hist-data" data-histfield="sacado" value='${safeSac}'>
+                <input type="text" class="dep-input" data-field="sacado" data-prod="${esc(prod)}" value="${esc(pData.sacado)}" data-lastval="${esc(pData.sacado)}" style="${inputStyle}">
+                <input type="hidden" class="dep-hist-data" data-histfield="sacado" value='${esc(safeSac)}'>
                 <button type="button" class="btn-historial" onclick="verHistorialFicha(this)" style="display:${safeSac !== '[]' ? 'inline-block' : 'none'}; background:#27ae60; color:white; border:none; border-radius:4px; font-size:0.6rem; padding: 2px 6px; margin-top:4px; cursor:pointer;" title="Ver historial"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
             </td>
             <td style="text-align: center; vertical-align: middle; padding: 8px 4px;">
-                <span class="dep-total" data-prod="${prod}" style="display: inline-block; min-width: 44px; background: rgba(39,174,96,0.12); color: #27ae60; font-weight: 800; font-size: 1.05rem; padding: 6px 14px; border-radius: 12px; letter-spacing: 0.5px;">0</span>
+                <span class="dep-total" data-prod="${esc(prod)}" style="display: inline-block; min-width: 44px; background: rgba(39,174,96,0.12); color: #27ae60; font-weight: 800; font-size: 1.05rem; padding: 6px 14px; border-radius: 12px; letter-spacing: 0.5px;">0</span>
             </td>
             <td style="text-align: center; vertical-align: middle; padding: 8px 4px;">
-                <span class="dep-total-unid" data-prod="${prod}" style="display: inline-block; min-width: 44px; background: linear-gradient(135deg, rgba(231,76,60,0.12), rgba(192,57,43,0.08)); color: #e74c3c; font-weight: 800; font-size: 1.05rem; padding: 6px 14px; border-radius: 12px; border: 1.5px solid rgba(231,76,60,0.2); letter-spacing: 0.5px;">0</span>
+                <span class="dep-total-unid" data-prod="${esc(prod)}" style="display: inline-block; min-width: 44px; background: linear-gradient(135deg, rgba(231,76,60,0.12), rgba(192,57,43,0.08)); color: #e74c3c; font-weight: 800; font-size: 1.05rem; padding: 6px 14px; border-radius: 12px; border: 1.5px solid rgba(231,76,60,0.2); letter-spacing: 0.5px;">0</span>
             </td>
         `;
         tbody.appendChild(tr);

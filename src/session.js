@@ -1,3 +1,4 @@
+// ─── AYUDAS DE ESCAPE ───────────────────────────────────────────────────
 // ─── VERIFICAR CIERRE EN SERVIDOR Y CONEXIÓN ────────────────────────────
 // Sincronizar avatares en segundo plano
 fetch('/api/avatars')
@@ -5,7 +6,9 @@ fetch('/api/avatars')
     .then(avatars => {
         if (avatars && typeof avatars === 'object') {
             for (const cedula in avatars) {
-                localStorage.setItem('fotoPerfil_' + cedula, avatars[cedula]);
+                const foto = avatarSeguro(avatars[cedula]);
+                if (foto) localStorage.setItem('fotoPerfil_' + cedula, foto);
+                else localStorage.removeItem('fotoPerfil_' + cedula);
             }
         }
     })
@@ -140,11 +143,11 @@ function mostrarPartners(usuarios, listEl) {
     dynamicList.innerHTML = '<div style="margin-top: 15px; margin-bottom: 10px; padding-left: 4px;"><span style="color: var(--yellow); font-size: 0.8rem; font-weight: 800; letter-spacing: 1px;">OTROS COMPAÑEROS</span></div>';
 
     otros.forEach(u => {
-        const foto = localStorage.getItem('fotoPerfil_' + u.cedula);
+        const foto = avatarSeguro(localStorage.getItem('fotoPerfil_' + u.cedula));
         const inicial = (u.nombre || 'U').charAt(0).toUpperCase();
         const avatarHTML = foto
-            ? `<img src="${foto}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid var(--green);flex-shrink:0;">`
-            : `<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--green),#9575cd);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:0.95rem;flex-shrink:0;">${inicial}</div>`;
+            ? `<img src="${esc(foto)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid var(--green);flex-shrink:0;">`
+            : `<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--green),#9575cd);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:0.95rem;flex-shrink:0;">${esc(inicial)}</div>`;
 
         const item = document.createElement('div');
         item.className = 'partner-item';
@@ -154,7 +157,7 @@ function mostrarPartners(usuarios, listEl) {
         item.style.gap = '12px';
         item.innerHTML = `
         ${avatarHTML}
-        <div class="p-name" style="font-weight: 800; text-transform: uppercase; font-size: 0.85rem; flex:1;">${u.nombre || 'Sin nombre'}</div>
+        <div class="p-name" style="font-weight: 800; text-transform: uppercase; font-size: 0.85rem; flex:1;">${esc(u.nombre || 'Sin nombre')}</div>
         <div style="background: #00bcd4; width: 24px; height: 24px; border-radius: 4px; display: flex; justify-content: center; align-items: center; color: white;"><i class="fa-solid fa-arrow-right" style="font-size: 0.8rem;"></i></div>
     `;
         item.addEventListener('click', () => {
@@ -165,7 +168,7 @@ function mostrarPartners(usuarios, listEl) {
 
             const subEl = document.getElementById('top-subtitle');
             const partnerName = partnerSeleccionado ? partnerSeleccionado.nombre : 'Solo';
-            subEl.innerHTML = `<i class="fa-solid fa-users" style="margin-right:4px;color:var(--yellow);"></i> ${yo.nombre || 'Tú'} &amp; ${partnerName} (+ Ayuda: ${u.nombre})`;
+            subEl.innerHTML = `<i class="fa-solid fa-users" style="margin-right:4px;color:var(--yellow);"></i> ${esc(yo.nombre || 'Tú')} &amp; ${esc(partnerName)} (+ Ayuda: ${esc(u.nombre)})`;
         });
         dynamicList.appendChild(item);
     });
@@ -181,7 +184,7 @@ function iniciarInventario() {
     if (partnerSeleccionado) {
         subEl.innerHTML = `
         <i class="fa-solid fa-users" style="margin-right:4px;color:var(--yellow);"></i>
-        ${yo.nombre || 'Tú'} &amp; ${partnerSeleccionado.nombre}
+        ${esc(yo.nombre || 'Tú')} &amp; ${esc(partnerSeleccionado.nombre)}
     `;
     } else {
         subEl.textContent = `Inventario`;

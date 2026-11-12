@@ -10,6 +10,8 @@ avatars/
 !package.json
 !package-lock.json
 !tsconfig.json
+# Catálogo de productos: es código fuente, no dato generado
+!src/products.json
 
 # Hojas de cálculo y exportaciones
 *.xlsx

@@ -1,3 +1,4 @@
+// ─── AYUDAS DE ESCAPE ───
 // ─── CACHÉ DE USUARIOS (solo con sesión iniciada) ───
 // Se guardan nombre/cédula/rol para el selector de compañeros sin conexión.
 // Nunca se guardan contraseñas.
@@ -256,7 +257,7 @@ let fotoPerfilTemporal = null; // base64 temporal mientras no se guarda
 
 function actualizarAvatarUI() {
     const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    const foto = localStorage.getItem('fotoPerfil_' + user.cedula);
+    const foto = avatarSeguro(localStorage.getItem('fotoPerfil_' + user.cedula));
     const nombre = user.nombre || '';
     const inicial = nombre.charAt(0).toUpperCase() || '?';
 
@@ -532,8 +533,8 @@ function renderizarPasillosInicio() {
             a.className = 'pasillo-btn';
             a.href = '#';
             a.innerHTML = `
-                <i class="fa-solid ${grupo.icon} pasillo-icon"></i>
-                <span class="pasillo-name">${grupo.label}</span>
+                <i class="fa-solid ${esc(grupo.icon)} pasillo-icon"></i>
+                <span class="pasillo-name">${esc(grupo.label)}</span>
             `;
             a.onclick = function (e) {
                 e.preventDefault();
@@ -552,8 +553,8 @@ function renderizarPasillosInicio() {
         a.className = 'pasillo-btn';
         a.href = `pasillo.html?id=${encodeURIComponent(key)}`;
         a.innerHTML = `
-            <i class="fa-solid ${icon} pasillo-icon"></i>
-            <span class="pasillo-name">${displayName}</span>
+            <i class="fa-solid ${esc(icon)} pasillo-icon"></i>
+            <span class="pasillo-name">${esc(displayName)}</span>
         `;
 
         grid.appendChild(a);
@@ -578,7 +579,7 @@ function mostrarModalSubPasillos(grupo) {
         document.body.appendChild(modal);
     }
 
-    document.getElementById('sub-modal-title').innerHTML = `<i class="fa-solid ${grupo.icon}"></i> ${grupo.label}`;
+    document.getElementById('sub-modal-title').innerHTML = `<i class="fa-solid ${esc(grupo.icon)}"></i> ${esc(grupo.label)}`;
     const list = document.getElementById('sub-modal-list');
     list.innerHTML = '';
 
@@ -587,7 +588,7 @@ function mostrarModalSubPasillos(grupo) {
         const label = key.replace(/^\d+-/, '').replace(/-/g, ' ').toUpperCase();
         const btn = document.createElement('button');
         btn.style.cssText = 'background:rgba(255,165,0,0.1);border:1px solid rgba(255,165,0,0.3);color:#fff;padding:16px;border-radius:12px;font-weight:800;text-align:left;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:all 0.2s;width:100%;';
-        btn.innerHTML = `<span>${label}</span><span style="color:#aaa;font-size:0.8rem;font-weight:normal;">${window.ALL_PRODUCTS[key].length} productos</span>`;
+        btn.innerHTML = `<span>${esc(label)}</span><span style="color:#aaa;font-size:0.8rem;font-weight:normal;">${window.ALL_PRODUCTS[key].length} productos</span>`;
         btn.onmouseover = () => { btn.style.background = 'rgba(255,165,0,0.2)'; btn.style.transform = 'scale(1.02)'; };
         btn.onmouseout = () => { btn.style.background = 'rgba(255,165,0,0.1)'; btn.style.transform = 'scale(1)'; };
         btn.onclick = () => {
@@ -618,7 +619,7 @@ function mostrarModalPartes(key, name, icon, totalItems, chunkSize) {
         document.body.appendChild(modal);
     }
 
-    document.getElementById('parts-modal-title').innerHTML = `<i class="fa-solid ${icon}"></i> ${name}`;
+    document.getElementById('parts-modal-title').innerHTML = `<i class="fa-solid ${esc(icon)}"></i> ${esc(name)}`;
     const list = document.getElementById('parts-modal-list');
     list.innerHTML = '';
 

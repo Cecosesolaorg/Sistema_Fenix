@@ -83,31 +83,43 @@ function renderProductos() {
         }
 
         const extraIcons = p.isExtra ? `<div style="display:flex; gap: 4px;">
-            <i class="fa-solid fa-pencil" style="font-size: 0.9rem; color: var(--yellow); cursor: pointer; padding: 4px; flex-shrink: 0;" onclick="renombrarProducto('${p.code}')" title="Renombrar producto"></i>
-            <i class="fa-solid fa-trash" style="font-size: 0.9rem; color: var(--red); cursor: pointer; padding: 4px; flex-shrink: 0;" onclick="eliminarProductoExtra('${p.code}')" title="Eliminar producto"></i>
+            <i class="fa-solid fa-pencil btn-renombrar-extra" data-code="${esc(p.code)}" style="font-size: 0.9rem; color: var(--yellow); cursor: pointer; padding: 4px; flex-shrink: 0;" title="Renombrar producto"></i>
+            <i class="fa-solid fa-trash btn-eliminar-extra" data-code="${esc(p.code)}" style="font-size: 0.9rem; color: var(--red); cursor: pointer; padding: 4px; flex-shrink: 0;" title="Eliminar producto"></i>
         </div>` : '';
 
         card.innerHTML = `
-        <div class="prod-status-dot" style="display: ${compareMode ? 'flex' : 'none'};" onclick="cycleCheckState('${p.code}'); event.stopPropagation();"></div>
+        <div class="prod-status-dot" style="display: ${compareMode ? 'flex' : 'none'};"></div>
         <div class="prod-info">
             <div class="prod-name" style="display: flex; align-items: center; gap: 6px; justify-content: flex-start;">
                 <span id="name-${safeId}" 
                       title="Toca para expandir el nombre completo" 
                       style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; display: block; width: 100%;"
                       onclick="this.style.whiteSpace = this.style.whiteSpace === 'normal' ? 'nowrap' : 'normal';">
-                      ${p.name}
+                      ${esc(p.name)}
                 </span>
                 ${extraIcons}
             </div>
         </div>
         <div class="counter" style="display: flex; align-items: center;">
             ${existenciaHtml}
-            <span class="counter-val" id="val-${safeId}"
+            <span class="counter-val" id="val-${safeId}" data-code="${esc(p.code)}"
                   title="Toca para abrir calculadora"
-                  onclick="abrirCalculadora('${p.code}')"
-            >${conteos[p.code] || 0}</span>
+            >${Number(conteos[p.code] || 0)}</span>
         </div>
     `;
+        // Los datos van por dataset: nunca dentro de un onclick.
+        const dot = card.querySelector('.prod-status-dot');
+        if (dot) dot.addEventListener('click', function (e) {
+            e.stopPropagation();
+            cycleCheckState(p.code);
+        });
+        const val = card.querySelector('.counter-val');
+        if (val) val.addEventListener('click', function () { abrirCalculadora(p.code); });
+        const btnRen = card.querySelector('.btn-renombrar-extra');
+        if (btnRen) btnRen.addEventListener('click', function () { renombrarProducto(this.dataset.code); });
+        const btnDel = card.querySelector('.btn-eliminar-extra');
+        if (btnDel) btnDel.addEventListener('click', function () { eliminarProductoExtra(this.dataset.code); });
+
         list.appendChild(card);
     });
     actualizarStats();

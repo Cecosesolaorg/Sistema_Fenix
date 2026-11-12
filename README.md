@@ -60,15 +60,15 @@ Estado actual del proyecto:
 | Rutas de archivos estáticos y descargas | ✅ restringidas al proyecto (`SEC-03`) |
 | Nombres de archivo al escribir (avatares, reportes) | ✅ saneados (`SEC-05`) |
 | Tamaño de las peticiones POST | ✅ límite de 5 MB (`SEC-10`) |
-| Cabeceras de seguridad | ✅ `nosniff`, `DENY`, `no-referrer` (`SEC-12`) |
+| Cabeceras de seguridad | ✅ `nosniff`, `DENY`, `no-referrer` y CSP (`SEC-12`) |
 | Autenticación y autorización en el servidor | ✅ sesión + roles (`SEC-01`, `SEC-02`, `SEC-07`, `SEC-08`) |
 | Contraseñas | ✅ scrypt en reposo; nunca se envían al cliente (`SEC-06`) |
 | Migración de claves viejas | ✅ a hash al arrancar y al primer login |
 | Permisos de los datos | ✅ carpetas `700`, archivos `600` |
 | Cambio de contraseña | ✅ desde el perfil, con la clave actual |
 | Cifrado en tránsito | ❌ HTTP plano en la red local |
-| Productos en código ejecutable | ❌ pendiente (`SEC-04`) |
-| XSS en el panel | ❌ pendiente (`SEC-09`) |
+| Productos en código ejecutable | ✅ datos en JSON, nunca se evalúan (`SEC-04`) |
+| XSS en el panel | ✅ escape en cliente y validación en servidor (`SEC-09`) |
 
 ### Cómo funciona el acceso
 
@@ -78,6 +78,13 @@ Estado actual del proyecto:
 - `GET /api/users` exige sesión y devuelve solo nombre, cédula y rol.
 - Las acciones de administración (roles, expulsiones, pasillos, historial)
   exigen rol `admin` en el servidor.
+- El catálogo de productos vive en `src/products.json`. `src/products.js` es
+  una plantilla: el servidor inyecta los datos serializados como JSON, así que
+  un nombre de producto nunca se ejecuta como código.
+- Todo texto que viene de usuarios, reportes o configuración se escapa antes
+  de insertarse en el HTML (`src/seguridad.js`). El servidor además rechaza
+  nombres con etiquetas HTML, avatares que no sean imágenes y pasillos con
+  caracteres reservados.
 - Hay límite de 5 intentos fallidos por cédula y IP cada 5 minutos.
 - Las contraseñas en texto plano de versiones anteriores se convierten a hash
   (`scrypt`) automáticamente al arrancar el servidor y también la primera vez
@@ -87,6 +94,10 @@ Estado actual del proyecto:
 - `registros/`, `inventarios base de datos/` y `reportes_enviados/` quedan con
   permisos `700` (carpetas) y `600` (archivos): solo el usuario que corre el
   servidor puede leerlos. Los archivos nuevos nacen con esos permisos.
+
+La política de seguridad de contenido (CSP) solo permite scripts y estilos
+propios y de los CDN usados (`cdn.jsdelivr.net`, `cdnjs.cloudflare.com`,
+`fonts.googleapis.com`, `fonts.gstatic.com`).
 
 **No exponer la aplicación a Internet** mientras use HTTP plano. Para uso en red
 local, limitar el acceso a una VLAN o SSID de confianza.

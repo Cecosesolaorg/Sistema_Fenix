@@ -180,6 +180,8 @@ function serveStatic(req, res) {
 
 // ── Usuarios, sesiones y respuestas ─────────────────────────────────────────
 const CEDULA_RE = /^[0-9A-Za-z_-]{1,40}$/;
+// Nombres visibles: sin etiquetas HTML ni comillas, largo acotado.
+const NOMBRE_RE = /^[\p{L}\p{N} .,'_\-]{1,80}$/u;
 
 // Archivos de estado que viven en registros/ pero no son usuarios.
 const STATE_FILES = new Set([
@@ -291,6 +293,66 @@ function securePermissions() {
  * Convierte a hash las contraseñas en texto plano que queden en registros/.
  * Se ejecuta al arrancar, para que nadie dependa de haber iniciado sesión.
  */
+// ── Productos: datos en JSON, nunca en código ────────────────────────────────
+// src/products.json es la única fuente de verdad. src/products.js es una
+// plantilla sin datos: el servidor inyecta el JSON serializado al servirla.
+const PRODUCTS_JSON = path.join(__dirname, 'src', 'products.json');
+const PRODUCTS_TEMPLATE = path.join(__dirname, 'src', 'products.js');
+const PRODUCTS_MARKER = '/*__PRODUCTS_JSON__*/{}';
+const MAX_PRODUCTOS_POR_PASILLO = 3000;
+const MAX_LARGO_PRODUCTO = 120;
+const PASILLO_ID_RE = /^[\p{L}\p{N} _-]{1,80}$/u;
+
+/** Nombre de producto: sin controles ni etiquetas, con largo acotado. */
+function validProductName(value) {
+    if (typeof value !== 'string') return null;
+    const nombre = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    if (!nombre || nombre.length > MAX_LARGO_PRODUCTO) return null;
+    if (/[<>"`\\]/.test(nombre)) return null;
+    return nombre;
+}
+
+function validPasilloId(value) {
+    if (typeof value !== 'string') return null;
+    const id = value.trim();
+    return PASILLO_ID_RE.test(id) ? id : null;
+}
+
+function readProductsData() {
+    try {
+        const data = JSON.parse(fs.readFileSync(PRODUCTS_JSON, 'utf8'));
+        return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+/** Escritura atómica del JSON de productos (nunca se escribe código). */
+function writeProductsData(data) {
+    const tmp = PRODUCTS_JSON + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 4) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, PRODUCTS_JSON);
+    try { fs.chmodSync(PRODUCTS_JSON, 0o600); } catch (e) { }
+}
+
+let productsScriptCache = { stamp: '', body: '' };
+
+/** Genera el JS que consume el navegador, inyectando los datos como JSON. */
+function productsScript() {
+    const statJson = fs.statSync(PRODUCTS_JSON);
+    const statTpl = fs.statSync(PRODUCTS_TEMPLATE);
+    const stamp = `${statJson.mtimeMs}:${statJson.size}:${statTpl.mtimeMs}:${statTpl.size}`;
+    if (productsScriptCache.stamp === stamp) return productsScriptCache.body;
+
+    const template = fs.readFileSync(PRODUCTS_TEMPLATE, 'utf8');
+    if (!template.includes(PRODUCTS_MARKER)) throw new Error('Plantilla de productos inválida');
+
+    const json = JSON.stringify(readProductsData(), null, 4);
+    const body = template.replace(PRODUCTS_MARKER, () => json);
+    productsScriptCache = { stamp, body };
+    return body;
+}
+
 function migratePlaintextPasswords() {
     let migrated = 0;
     let weak = 0;
@@ -398,6 +460,16 @@ const requestHandler = (req, res) => {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-XSS-Protection', '0');
+    // El panel usa manejadores inline, así que 'unsafe-inline' sigue siendo
+    // necesario; el resto de la política bloquea orígenes, objetos y frames.
+    res.setHeader('Content-Security-Policy',
+        "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com https://cdnjs.cloudflare.com; " +
+        "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; " +
+        "img-src 'self' data:; " +
+        "connect-src 'self'; " +
+        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
 
     // Límite global de tamaño de cuerpo (todos los POST)
     let bodyBytes = 0;
@@ -665,8 +737,9 @@ const requestHandler = (req, res) => {
                 const password = String(data.password || '');
 
                 if (!CEDULA_RE.test(cedula)) throw new Error('Cédula inválida');
-                if (!nombre) throw new Error('Falta el nombre');
-                if (nombre.length > 80) throw new Error('Nombre demasiado largo');
+                if (!NOMBRE_RE.test(nombre)) {
+                    throw new Error('El nombre solo puede tener letras, números, espacios y . , \' - _');
+                }
                 if (password.length < 4) throw new Error('La contraseña debe tener al menos 4 caracteres');
                 if (password.length > 200) throw new Error('Contraseña demasiado larga');
 
@@ -756,24 +829,29 @@ const requestHandler = (req, res) => {
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
-                if (!data.usuario || !data.accion) throw new Error('Faltan datos');
+                const accion = String(data.accion || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+                if (!accion) throw new Error('Faltan datos');
+                if (accion.length > 160) throw new Error('Acción demasiado larga');
 
                 const historialPath = path.join(DIRECTORY, 'historial.json');
                 let historial = [];
                 if (fs.existsSync(historialPath)) {
                     historial = JSON.parse(fs.readFileSync(historialPath, 'utf8'));
                 }
+                if (!Array.isArray(historial)) historial = [];
 
+                // El usuario sale de la sesión, no del cuerpo de la petición.
                 const evento = {
-                    usuario: data.usuario,
-                    accion: data.accion,
+                    usuario: (session && session.nombre) || 'Desconocido',
+                    accion,
                     fecha: new Date().toISOString()
                 };
 
                 // Agregamos al inicio para que el más reciente esté primero
                 historial.unshift(evento);
+                if (historial.length > 5000) historial = historial.slice(0, 5000);
 
-                fs.writeFileSync(historialPath, JSON.stringify(historial, null, 4), 'utf8');
+                fs.writeFileSync(historialPath, JSON.stringify(historial, null, 4), { encoding: 'utf8', mode: 0o600 });
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'success' }));
@@ -879,6 +957,13 @@ const requestHandler = (req, res) => {
                 const cedula = String(data.cedula).replace(/[^0-9A-Za-z_-]/g, '');
                 if (!cedula || cedula.length > 40) throw new Error('Cédula inválida');
 
+                // Solo imágenes en data URL: nada de HTML ni URLs externas.
+                const foto = String(data.fotoBase64);
+                if (foto.length > MAX_BODY_BYTES) throw new Error('La foto es demasiado grande');
+                if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(foto)) {
+                    throw new Error('Formato de foto no permitido');
+                }
+
                 // Cada usuario cambia su avatar; solo admin puede tocar el de otro.
                 if (session && session.role !== 'admin' && String(session.cedula) !== cedula) {
                     sendJson(res, 403, { status: 'error', message: 'No podés cambiar el avatar de otro usuario' });
@@ -887,13 +972,12 @@ const requestHandler = (req, res) => {
 
                 const filepath = path.join(AVATARS_DIR, `${cedula}.txt`);
                 if (!isInside(AVATARS_DIR, filepath)) throw new Error('Ruta inválida');
-                fs.writeFileSync(filepath, data.fotoBase64, 'utf8');
+                fs.writeFileSync(filepath, foto, { encoding: 'utf8', mode: 0o600 });
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'success' }));
             } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'error', message: e.message }));
+                sendJson(res, 400, { status: 'error', message: e.message });
             }
         });
 
@@ -1006,19 +1090,30 @@ const requestHandler = (req, res) => {
                 const data = JSON.parse(body);
                 if (!data.code || !data.name) throw new Error('Faltan datos de producto');
 
+                const pasilloId = validPasilloId(data.pasillo || '');
+                const nombreProducto = validProductName(String(data.name));
+                const codigo = String(data.code).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 40);
+                if (!pasilloId || !nombreProducto) throw new Error('Datos de producto inválidos');
+
                 const pendientesPath = path.join(DIRECTORY, 'pendientes.json');
                 let pendientes = [];
                 if (fs.existsSync(pendientesPath)) {
                     pendientes = JSON.parse(fs.readFileSync(pendientesPath, 'utf8'));
                 }
+                if (!Array.isArray(pendientes)) pendientes = [];
 
-                // Add unique id
-                data.id = Date.now().toString();
-                data.fecha = new Date().toISOString();
+                const pendiente = {
+                    id: Date.now().toString(),
+                    fecha: new Date().toISOString(),
+                    code: codigo,
+                    name: nombreProducto,
+                    pasillo: pasilloId
+                };
+                const existente = pendientes.find(p => p && p.name === pendiente.name && p.pasillo === pendiente.pasillo);
+                if (!existente) pendientes.push(pendiente);
+                if (pendientes.length > 500) pendientes = pendientes.slice(-500);
 
-                pendientes.push(data);
-
-                fs.writeFileSync(pendientesPath, JSON.stringify(pendientes, null, 4), 'utf8');
+                fs.writeFileSync(pendientesPath, JSON.stringify(pendientes, null, 4), { encoding: 'utf8', mode: 0o600 });
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'success' }));
@@ -1305,121 +1400,127 @@ const requestHandler = (req, res) => {
         });
 
     } else if (req.method === 'POST' && req.url === '/api/agregar-pasillo') {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
-            try {
-                const { id, nombre, productos } = JSON.parse(body);
-                if (!id || !nombre) throw new Error('Faltan datos');
+        readJsonBody(req, res, (data) => {
+            const id = validPasilloId(data.id);
+            const nombre = String(data.nombre || '').trim();
+            const productos = Array.isArray(data.productos) ? data.productos : [];
 
-                const productsPath = path.join(__dirname, 'src', 'products.js');
-                let content = fs.readFileSync(productsPath, 'utf8');
+            if (!id) {
+                sendJson(res, 400, { status: 'error', message: 'Identificador de pasillo inválido' });
+                return;
+            }
+            if (!nombre || nombre.length > 80) {
+                sendJson(res, 400, { status: 'error', message: 'Nombre de pasillo inválido' });
+                return;
+            }
+            if (productos.length > MAX_PRODUCTOS_POR_PASILLO) {
+                sendJson(res, 400, { status: 'error', message: 'Demasiados productos para un pasillo' });
+                return;
+            }
 
-                // Verificar que no exista ya
-                if (content.includes(`"${id}"`)) {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'exists', message: 'El pasillo ya existe en products.js' }));
+            const limpios = [];
+            for (const p of productos) {
+                const nombreProducto = validProductName(p);
+                if (!nombreProducto) {
+                    sendJson(res, 400, { status: 'error', message: 'Hay un nombre de producto inválido' });
                     return;
                 }
-
-                // Construir el bloque a insertar
-                const prods = (productos || []).map(p => `        "${p}"`).join(',\n');
-                const bloque = `    "${id}": [\n${prods ? prods + '\n' : ''}    ]`;
-
-                // Localizar el cierre correcto de ALL_PRODUCTS usando el marcador posterior
-                const marker = 'window.ALL_PRODUCTS = ALL_PRODUCTS;';
-                const markerIdx = content.indexOf(marker);
-                if (markerIdx === -1) throw new Error('No se encontró el marcador en products.js');
-
-                // Buscar el '};' justo antes del marcador
-                const beforeMarker = content.slice(0, markerIdx);
-                const closeIdx = beforeMarker.lastIndexOf('};');
-                if (closeIdx === -1) throw new Error('No se encontró el cierre del objeto ALL_PRODUCTS');
-
-                // Añadir coma al bloque anterior si falta
-                const before = content.slice(0, closeIdx).trimEnd();
-                const needsComma = !before.endsWith(',');
-                const after = content.slice(closeIdx + 2); // lo que viene tras '};'
-                const newContent = before + (needsComma ? ',' : '') + '\n' + bloque + '\n};\n' + after;
-
-                fs.writeFileSync(productsPath, newContent, 'utf8');
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'success', message: `Pasillo "${nombre}" guardado en products.js` }));
-            } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'error', message: e.message }));
+                limpios.push(nombreProducto);
             }
+
+            const catalogo = readProductsData();
+            if (Object.prototype.hasOwnProperty.call(catalogo, id)) {
+                sendJson(res, 200, { status: 'exists', message: 'El pasillo ya existe' });
+                return;
+            }
+
+            catalogo[id] = limpios;
+            try {
+                writeProductsData(catalogo);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo guardar el pasillo' });
+                return;
+            }
+
+            sendJson(res, 200, { status: 'success', message: `Pasillo "${nombre}" creado` });
+
         });
 
     } else if (req.method === 'POST' && req.url === '/api/agregar-producto') {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
-            try {
-                const { pasilloId, productoNombre } = JSON.parse(body);
-                if (!pasilloId || !productoNombre) throw new Error('Faltan datos');
+        readJsonBody(req, res, (data) => {
+            const pasilloId = validPasilloId(data.pasilloId);
+            const productoNombre = validProductName(data.productoNombre);
 
-                const productsPath = path.join(__dirname, 'src', 'products.js');
-                let content = fs.readFileSync(productsPath, 'utf8');
-
-                // Regex para capturar el arreglo de este pasillo en el archivo estático
-                const escapedId = pasilloId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const pasilloRegex = new RegExp(`("${escapedId}"\\s*:\\s*\\[)([\\s\\S]*?)(\\])`);
-                const match = content.match(pasilloRegex);
-
-                if (!match) {
-                    res.writeHead(404, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'error', message: 'Pasillo no encontrado en products.js' }));
-                    return;
-                }
-
-                let insideArray = match[2];
-                // Insertaremos coma si no está vacío y no la tiene aún
-                if (insideArray.trim() !== '') {
-                    const lineasTrimmed = insideArray.trimEnd();
-                    if (!lineasTrimmed.endsWith(',')) insideArray = lineasTrimmed + ',\n';
-                }
-
-                insideArray += `        "${productoNombre}"\n    `;
-
-                const newContent = content.replace(pasilloRegex, `$1\n${insideArray.trimStart()}$3`);
-                fs.writeFileSync(productsPath, newContent, 'utf8');
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'success', message: 'Producto insertado directamente' }));
-            } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'error', message: e.message }));
+            if (!pasilloId || !productoNombre) {
+                sendJson(res, 400, { status: 'error', message: 'Datos de producto inválidos' });
+                return;
             }
+
+            const catalogo = readProductsData();
+            if (!Array.isArray(catalogo[pasilloId])) {
+                sendJson(res, 404, { status: 'error', message: 'Pasillo no encontrado' });
+                return;
+            }
+            if (catalogo[pasilloId].length >= MAX_PRODUCTOS_POR_PASILLO) {
+                sendJson(res, 400, { status: 'error', message: 'El pasillo alcanzó el máximo de productos' });
+                return;
+            }
+
+            if (!catalogo[pasilloId].includes(productoNombre)) {
+                catalogo[pasilloId].push(productoNombre);
+            }
+
+            try {
+                writeProductsData(catalogo);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo guardar el producto' });
+                return;
+            }
+
+            sendJson(res, 200, { status: 'success', message: 'Producto agregado' });
+
         });
 
     } else if (req.method === 'POST' && req.url === '/api/eliminar-pasillo') {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
-            try {
-                const { pasilloId } = JSON.parse(body);
-                if (!pasilloId) throw new Error('Faltan datos');
-
-                const productsPath = path.join(__dirname, 'src', 'products.js');
-                let content = fs.readFileSync(productsPath, 'utf8');
-
-                const escapedId = pasilloId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                // Matches optional leading whitespace, the key, the colon, the array, and an optional trailing comma.
-                const pasilloRegex = new RegExp(`\\s*"${escapedId}"\\s*:\\s*\\[[\\s\\S]*?\\]\\s*,?`, 'm');
-
-                const newContent = content.replace(pasilloRegex, '');
-
-                fs.writeFileSync(productsPath, newContent, 'utf8');
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'success', message: 'Pasillo eliminado' }));
-            } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'error', message: e.message }));
+        readJsonBody(req, res, (data) => {
+            const pasilloId = validPasilloId(data.pasilloId);
+            if (!pasilloId) {
+                sendJson(res, 400, { status: 'error', message: 'Pasillo inválido' });
+                return;
             }
+
+            const catalogo = readProductsData();
+            if (!Object.prototype.hasOwnProperty.call(catalogo, pasilloId)) {
+                sendJson(res, 404, { status: 'error', message: 'Pasillo no encontrado' });
+                return;
+            }
+
+            delete catalogo[pasilloId];
+
+            try {
+                writeProductsData(catalogo);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo eliminar el pasillo' });
+                return;
+            }
+
+            sendJson(res, 200, { status: 'success', message: 'Pasillo eliminado' });
+
         });
+
+    } else if (req.method === 'GET' && pathname === '/src/products.js') {
+        // El catálogo se sirve generado: los datos son JSON, no código.
+        try {
+            const body = productsScript();
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'X-Content-Type-Options': 'nosniff'
+            });
+            res.end(body);
+        } catch (e) {
+            sendJson(res, 500, { status: 'error', message: 'No se pudo cargar el catálogo' });
+        }
 
     } else {
         // Sirviendo archivos estaticos (solo dentro del proyecto y con extension permitida)

@@ -203,8 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const tbody = document.querySelector('#products-table tbody');
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${code}</td>
-                <td>${name}</td>
+                <td>${esc(code)}</td>
+                <td>${esc(name)}</td>
                 <td>Alimentos</td>
                 <td><span class="badge-type badge-in">${stock}</span></td>
                 <td>$${parseFloat(price).toFixed(2)}</td>
@@ -327,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (selectedRole === 'admin') {
                 roleHtml = `
-                    <select onchange="cambiarRol('${u.cedula}', this.value)" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); outline: none;">
+                    <select data-cedula="${esc(u.cedula)}" class="rol-select" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); outline: none;">
                         <option value="user" ${rolActual === 'user' ? 'selected' : ''}>User</option>
                         <option value="coordinador" ${rolActual === 'coordinador' ? 'selected' : ''}>Coordinador</option>
                         <option value="admin" ${rolActual === 'admin' ? 'selected' : ''}>Admin</option>
@@ -344,26 +344,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>
                     <div style="display:flex; align-items:center; gap:10px;">
                         <div style="width:36px; height:36px; border-radius:50%; background: linear-gradient(135deg, var(--primary-green), #0a4a2e); display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.9rem; flex-shrink:0;">
-                            ${inicial}
+                            ${esc(inicial)}
                         </div>
-                        <span style="font-weight:600;">${u.nombre || 'Sin nombre'}</span>
+                        <span style="font-weight:600;">${esc(u.nombre || 'Sin nombre')}</span>
                     </div>
                 </td>
-                <td>${u.cedula || '—'}</td>
+                <td>${esc(u.cedula || '—')}</td>
                 <td>
                     <span style="font-family: monospace; letter-spacing: 2px; color: var(--text-muted);" title="Contraseña cifrada: no se puede mostrar">••••••</span>
                 </td>
                 <td>${roleHtml}</td>
-                <td>${fecha}</td>
+                <td>${esc(fecha)}</td>
                 <td>
                     <div style="display:flex; gap:5px; align-items:center;">
                         ${actionHtml}
-                        <button onclick="forzarCierreIndividual('${u.cedula}', '${(u.nombre || '').replace(/'/g, "\\'")}')" title="Forzar Cierre de Sesión" style="background:#e74c3c; color:white; border:none; border-radius:6px; padding:6px 10px; cursor:pointer;" class="action-btn">
+                        <button data-cedula="${esc(u.cedula)}" data-nombre="${esc(u.nombre || '')}" class="btn-forzar-cierre" title="Forzar Cierre de Sesión" style="background:#e74c3c; color:white; border:none; border-radius:6px; padding:6px 10px; cursor:pointer;" class="action-btn">
                             <i class="fa-solid fa-power-off"></i>
                         </button>
                     </div>
                 </td>
             `;
+
+            // Los manejadores van por addEventListener con dataset: los datos
+            // nunca se interpolan dentro de onclick/onchange.
+            const selectRol = tr.querySelector('.rol-select');
+            if (selectRol) {
+                selectRol.addEventListener('change', function () {
+                    window.cambiarRol(this.dataset.cedula, this.value);
+                });
+            }
+            const btnCierre = tr.querySelector('.btn-forzar-cierre');
+            if (btnCierre) {
+                btnCierre.addEventListener('click', function () {
+                    window.forzarCierreIndividual(this.dataset.cedula, this.dataset.nombre);
+                });
+            }
+
             tbody.appendChild(tr);
         });
 
@@ -512,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.style.opacity = '0';
         toast.style.transition = 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
 
-        toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation'}" style="margin-right: 8px;"></i> ${message}`;
+        toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation'}" style="margin-right: 8px;"></i> ${esc(message)}`;
 
         document.body.appendChild(toast);
 
