@@ -303,6 +303,26 @@
                         </div>
                     </div>
 
+                    <!-- Búsqueda y filtro de usuarios -->
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+                        <div class="search-bar" style="width: min(360px, 100%);">
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" id="users-search" placeholder="Buscar por nombre, cédula o rol…"
+                                autocomplete="off" oninput="filtrarUsuarios()" aria-label="Buscar usuario">
+                        </div>
+                        <select id="users-role-filter" onchange="filtrarUsuarios()" aria-label="Filtrar por rol"
+                            style="padding: 10px 14px; border-radius: 20px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main); font-family: inherit; outline: none; cursor: pointer;">
+                            <option value="">Todos los roles</option>
+                            <option value="admin">Admin</option>
+                            <option value="coordinador">Coordinador</option>
+                            <option value="user">User</option>
+                        </select>
+                        <button type="button" onclick="limpiarFiltroUsuarios()" title="Quitar la búsqueda y el filtro"
+                            style="background: none; border: 1px solid var(--border-color); color: var(--text-muted); padding: 10px 16px; border-radius: 20px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-xmark"></i> Limpiar
+                        </button>
+                    </div>
+
                     <div class="table-section glass">
                         <div class="table-responsive">
                             <table class="data-table" id="users-table">
@@ -467,7 +487,7 @@
     <!-- Productos Centralizados -->
     <script src="src/products.js"></script>
     <!-- Custom JS -->
-    <script src="app.js?v=2.2"></script>
+    <script src="app.js?v=2.3"></script>
     <script src="sistema.js?v=2.6"></script>
 </body>
 
