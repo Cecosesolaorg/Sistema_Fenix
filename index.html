@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fénix - Selección de Pasillos</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .pasillos-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            z-index: 1000;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
+            box-sizing: border-box;
+            background: #f4f5f7;
+            background-image: none;
+        }
+
+        .pasillos-card {
+            position: relative;
+            width: 100%;
+            max-width: 440px;
+            margin: 10px auto;
+            padding: 24px 16px;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 28px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            z-index: 2;
+            text-align: center;
+            color: #333333;
+            box-sizing: border-box;
+        }
+
+        .pasillos-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .pasillos-screen {
+                padding: 8px;
+            }
+
+            .pasillos-card {
+                padding: 20px 14px;
+                border-radius: 24px;
+                margin: 5px auto;
+            }
+
+            .pasillos-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            .pasillo-btn {
+                padding: 16px 10px;
+                gap: 8px;
+                border-radius: 16px;
+            }
+
+            .pasillo-icon {
+                font-size: 1.8rem;
+            }
+
+            .pasillo-name {
+                font-size: 0.85rem;
+            }
+        }
+
+        .pasillo-btn {
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 20px;
+            color: #333333;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+
+        .pasillo-btn:hover {
+            background: #f5f0ff;
+            border-color: #673ab7;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(103, 58, 183, 0.15);
+        }
+
+        .pasillo-icon {
+            font-size: 2rem;
+            color: #673ab7;
+        }
+
+        .pasillo-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .login-bg-glow {
+            display: none;
+        }
+
+        .btn-ir-sistema {
+            background: rgba(103, 58, 183, 0.1);
+            border: 1px solid rgba(103, 58, 183, 0.2);
+            color: #673ab7;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            text-decoration: none;
+            font-size: 1.2rem;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+
+        .btn-ir-sistema:hover {
+            background: rgba(103, 58, 183, 0.8);
+            border-color: #673ab7;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* ── PERFIL AVATAR ── */
+        .sel-avatar-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 16px;
+            cursor: pointer;
+        }
+
+        .sel-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #673ab7, #9575cd);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: white;
+            overflow: hidden;
+            border: 3px solid #673ab7;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 14px rgba(103, 58, 183, 0.25);
+        }
+
+        .sel-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sel-avatar .edit-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 1.1rem;
+            color: white;
+        }
+
+        .sel-avatar-wrap:hover .edit-overlay {
+            opacity: 1;
+        }
+
+        .sel-avatar-name {
+            font-size: 0.78rem;
+            color: #673ab7;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── MODAL PERFIL ── */
+        .perfil-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .perfil-overlay.open {
+            display: flex;
+        }
+
+        .perfil-modal {
+            background: #fff;
+            border-radius: 24px;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            animation: modalIn 0.25s ease;
+        }
+
+        @keyframes modalIn {
+            from {
+                transform: scale(0.92);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .perfil-modal h2 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #333;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .perfil-modal .sub {
+            font-size: 0.82rem;
+            color: #888;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .perfil-foto-wrap {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            cursor: pointer;
+        }
+
+        .perfil-foto {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #673ab7;
+            box-shadow: 0 6px 20px rgba(103, 58, 183, 0.25);
+        }
+
+        .perfil-foto-placeholder {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #673ab7, #9575cd);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: white;
+            border: 4px solid #673ab7;
+            box-shadow: 0 6px 20px rgba(103, 58, 183, 0.25);
+        }
+
+        .perfil-camara {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 32px;
+            height: 32px;
+            background: #673ab7;
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .perfil-camara:hover {
+            background: #512da8;
+        }
+
+        .perfil-input-nombre {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            color: #333;
+            outline: none;
+            margin-bottom: 8px;
+            transition: border-color 0.2s;
+        }
+
+        .perfil-input-nombre:focus {
+            border-color: #673ab7;
+        }
+
+        .perfil-cedula-label {
+            font-size: 0.78rem;
+            color: #999;
+            text-align: center;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .perfil-btn-guardar {
+            width: 100%;
+            background: #673ab7;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .perfil-btn-guardar:hover {
+            background: #512da8;
+        }
+
+        .perfil-btn-cancelar {
+            width: 100%;
+            background: none;
+            color: #999;
+            border: none;
+            padding: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body data-theme="light">
+    <!-- Register Screen -->
+    <div class="pasillos-screen" id="register-screen">
+        <div class="login-bg-glow"></div>
+
+        <div class="pasillos-card animate-float" style="max-width: 440px;">
+            <div class="login-header">
+                <div class="cecosesola-brand"
+                    style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <img src="logo-cecosesola.png" alt="Cecosesola Logo"
+                        style="height: 60px; width: auto; object-fit: contain;">
+                </div>
+                <h1 class="login-title" id="auth-title" style="color:#333;">Iniciar Sesión</h1>
+                <p class="login-subtitle" style="color:#673ab7;">INVENTARIO FÉNIX</p>
+            </div>
+
+            <form id="auth-form" style="text-align: left; margin-bottom: 25px;">
+                <div class="input-group">
+                    <label for="reg-cedula" class="input-label"
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 8px; padding-left: 4px;">Cédula</label>
+                    <div class="input-wrapper" style="position: relative; display: flex; align-items: center;">
+                        <i class="fa-solid fa-id-card input-icon"
+                            style="position: absolute; left: 16px; color: #aaa; font-size: 1rem; pointer-events: none;"></i>
+                        <input type="text" id="reg-cedula" placeholder="V-12345678" required
+                            style="width: 100%; padding: 14px 16px 14px 44px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 14px; outline: none; color: #333; font-family: inherit; font-size: 1.1rem; letter-spacing: 1px;">
+                    </div>
+                </div>
+                <div class="input-group" id="group-nombre" style="display: none;">
+                    <label for="reg-nombre" class="input-label"
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 8px; padding-left: 4px;">Nombre
+                        y Apellido</label>
+                    <div class="input-wrapper" style="position: relative; display: flex; align-items: center;">
+                        <i class="fa-solid fa-user input-icon"
+                            style="position: absolute; left: 16px; color: #aaa; font-size: 1rem; pointer-events: none;"></i>
+                        <input type="text" id="reg-nombre" placeholder="Ej. Juan Pérez"
+                            style="width: 100%; padding: 14px 16px 14px 44px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 14px; outline: none; color: #333; font-family: inherit; font-size: 1.1rem; letter-spacing: 1px;">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="reg-password" class="input-label"
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 8px; padding-left: 4px;">Contraseña</label>
+                    <div class="input-wrapper" style="position: relative; display: flex; align-items: center;">
+                        <i class="fa-solid fa-lock input-icon"
+                            style="position: absolute; left: 16px; color: #aaa; font-size: 1rem; pointer-events: none;"></i>
+                        <input type="password" id="reg-password" placeholder="••••••••" required
+                            style="width: 100%; padding: 14px 16px 14px 44px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 14px; outline: none; color: #333; font-family: inherit; font-size: 1.1rem; letter-spacing: 1px;">
+                    </div>
+                </div>
+                <button type="submit" id="btn-submit" class="btn-login"
+                    style="margin-top: 10px; padding: 16px; background: #673ab7; color: white; border: none; border-radius: 14px; width: 100%; font-size: 1.1rem; font-weight: 700; cursor: pointer;">
+                    <span class="btn-text" id="btn-submit-text">Iniciar Sesión</span>
+                </button>
+
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="#" id="toggle-mode"
+                        style="color: #60a5fa; text-decoration: none; font-size: 0.9rem; font-weight: 600;">¿No tienes
+                        cuenta? Regístrate aquí</a>
+                </div>
+            </form>
+
+            <div class="login-footer" style="color: #999; font-size: 0.8rem;">
+                <p>© 2026 Cecosesola — Inventario Fénix Renacer</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection Screen (Initially Hidden) -->
+    <div class="pasillos-screen" id="selection-screen" style="display: none;">
+        <div class="login-bg-glow"></div>
+        <div class="pasillos-card animate-float" style="max-width: 440px;">
+            <a href="sistema.html" id="btn-ir-sistema-interno" class="btn-ir-sistema" title="Ir al Sistema (Admin)"
+                style="display: none;">
+                <i class="fa-solid fa-user-gear"></i>
+            </a>
+            <div class="login-header">
+                <div class="cecosesola-brand"
+                    style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
+                    <img src="logo-cecosesola.png" alt="Cecosesola Logo"
+                        style="height: 60px; width: auto; object-fit: contain;">
+                </div>
+                <!-- Avatar de perfil clickeable -->
+                <div class="sel-avatar-wrap" onclick="abrirModalPerfil()" title="Editar perfil">
+                    <div class="sel-avatar" id="sel-avatar-circle">
+                        <span id="sel-avatar-inicial">?</span>
+                        <div class="edit-overlay"><i class="fa-solid fa-camera"></i></div>
+                    </div>
+                    <span class="sel-avatar-name" id="sel-avatar-nombre">Mi Perfil</span>
+                </div>
+                <h1 class="login-title" style="color:#333;">Selección de Pasillos</h1>
+                <p class="login-subtitle" id="welcome-message" style="color:#673ab7;">INVENTARIO FÉNIX</p>
+            </div>
+
+            <div class="pasillos-grid" id="pasillos-grid-container">
+                <!-- Se llenará dinámicamente con JS basado en src/products.js -->
+            </div>
+
+
+
+            <div style="margin-top: 20px;">
+                <button id="btn-cerrar-sesion" onclick="cerrarSesion()"
+                    style="width: 100%; background: #fff5f5; color: #e53935; border: 1px solid #ffcdd2; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s ease;"
+                    onmouseover="this.style.background='#ffebee';" onmouseout="this.style.background='#fff5f5';">
+                    <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+                </button>
+            </div>
+            <div class="login-footer" style="margin-top: 20px; color: #999; font-size: 0.8rem;">
+                <p>© 2026 Cecosesola — Inventario Fénix Renacer</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERFIL -->
+    <div class="perfil-overlay" id="perfil-overlay">
+        <div class="perfil-modal">
+            <h2><i class="fa-solid fa-user-circle" style="color:#673ab7;margin-right:8px;"></i>Mi Perfil</h2>
+            <p class="sub">Toca la foto para cambiarla</p>
+
+            <!-- Foto -->
+            <div class="perfil-foto-wrap" onclick="document.getElementById('input-foto').click()">
+                <div class="perfil-foto-placeholder" id="perfil-placeholder">?</div>
+                <img id="perfil-img" class="perfil-foto" src="" alt="Foto de perfil" style="display:none;">
+                <div class="perfil-camara"><i class="fa-solid fa-camera"></i></div>
+            </div>
+            <input type="file" id="input-foto" accept="image/*" style="display:none;" onchange="procesarFoto(this)">
+
+            <!-- Nombre editable -->
+            <input type="text" id="perfil-input-nombre" class="perfil-input-nombre" placeholder="Tu nombre completo...">
+            <span class="perfil-cedula-label" id="perfil-cedula-label">Cédula: —</span>
+
+            <button class="perfil-btn-guardar" onclick="guardarPerfil()">Guardar Cambios</button>
+            <button class="perfil-btn-cancelar" onclick="cerrarModalPerfil()">Cancelar</button>
+        </div>
+    </div>
+
+    <script src="src/products.js"></script>
+    <script src="index.js?v=1.1"></script>
+
+</body>
+
+</html>
