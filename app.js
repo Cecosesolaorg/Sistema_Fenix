@@ -202,6 +202,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // FUNCIÓN: CARGAR USUARIOS REGISTRADOS
     // ==========================================
+    let _usuariosTodos = [];
+    let _usuariosCountEl = null;
+    let _usuariosTbody = null;
+    let _usuariosFromLocal = false;
+
+    function _normTexto(s) {
+        return String(s == null ? '' : s)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
     function renderUsuarios(users, countEl, tbody, fromLocal) {
         if (selectedRole !== 'admin') {
             tbody.innerHTML = `
@@ -216,10 +229,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!users || users.length === 0) {
+        _usuariosTodos = users || [];
+        _usuariosCountEl = countEl;
+        _usuariosTbody = tbody;
+        _usuariosFromLocal = !!fromLocal;
+
+        const kpiCount = document.getElementById('kpi-usuarios-count');
+        if (kpiCount) kpiCount.textContent = _usuariosTodos.length;
+
+        if (!_usuariosTodos.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">
+                    <td colspan="7" style="text-align:center; color: var(--text-muted); padding: 30px;">
                         <i class="fa-solid fa-user-slash" style="font-size: 2rem;"></i>
                         <p style="margin-top: 10px;">No hay usuarios registrados aún.</p>
                     </td>
@@ -227,8 +248,48 @@ document.addEventListener('DOMContentLoaded', () => {
             if (countEl) countEl.textContent = '';
             return;
         }
+
+        pintarUsuarios();
+    }
+
+    /**
+     * Dibuja la tabla aplicando el texto de #users-search y el rol de
+     * #users-role-filter. Se llama al cargar y en cada tecla del buscador.
+     */
+    function pintarUsuarios() {
+        const tbody = _usuariosTbody;
+        if (!tbody) return;
+
+        const searchEl = document.getElementById('users-search');
+        const roleEl = document.getElementById('users-role-filter');
+        const q = _normTexto(searchEl ? searchEl.value : '');
+        const rolFiltro = roleEl ? roleEl.value : '';
+
+        const filtrados = _usuariosTodos.filter(function (u) {
+            const rol = u.role || 'user';
+            if (rolFiltro && rol !== rolFiltro) return false;
+            if (!q) return true;
+            // Cédula, nombre y rol; sin distinguir mayúsculas ni acentos.
+            return [u.nombre, u.cedula, rol].some(function (campo) {
+                return _normTexto(campo).indexOf(q) !== -1;
+            });
+        });
+
         tbody.innerHTML = '';
-        users.forEach((u, i) => {
+        if (!filtrados.length) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center; color: var(--text-muted); padding: 30px;">
+                        <i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>
+                        <p style="margin-top: 10px;">No hay usuarios que coincidan con la búsqueda.</p>
+                    </td>
+                </tr>`;
+            if (_usuariosCountEl)
+                _usuariosCountEl.innerHTML = `Mostrando 0 de ${_usuariosTodos.length} usuario(s)`;
+            return;
+        }
+
+        filtrados.forEach((u, i) => {
             const fecha = u.fecha
                 ? new Date(u.fecha).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })
                 : 'Sin fecha';
@@ -306,12 +367,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     cargarUsuarios();
                 });
         };
-        const src = fromLocal ? ' <small style="color:var(--primary-yellow);">(sin servidor)</small>' : '';
-        if (countEl) countEl.innerHTML = `Total: ${users.length} usuario(s) registrado(s)${src}`;
-
-        const kpiCount = document.getElementById('kpi-usuarios-count');
-        if (kpiCount) kpiCount.textContent = users.length;
+        const src = _usuariosFromLocal ? ' <small style="color:var(--primary-yellow);">(sin servidor)</small>' : '';
+        if (_usuariosCountEl) {
+            _usuariosCountEl.innerHTML = filtrados.length === _usuariosTodos.length
+                ? `Total: ${_usuariosTodos.length} usuario(s) registrado(s)${src}`
+                : `Mostrando ${filtrados.length} de ${_usuariosTodos.length} usuario(s)${src}`;
+        }
     }
+
+    // Filtros de la tabla de usuarios (buscador + selector de rol)
+    window.filtrarUsuarios = function () {
+        pintarUsuarios();
+    };
+
+    window.limpiarFiltroUsuarios = function () {
+        const searchEl = document.getElementById('users-search');
+        const roleEl = document.getElementById('users-role-filter');
+        if (searchEl) searchEl.value = '';
+        if (roleEl) roleEl.value = '';
+        pintarUsuarios();
+        if (searchEl) searchEl.focus();
+    };
 
     // Lógica para ojito de la contraseña
     window.togglePwdVis = function (index, pwdStr) {
