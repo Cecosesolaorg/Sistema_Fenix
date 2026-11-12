@@ -55,13 +55,19 @@ repositorio**.
 
 Estado actual del proyecto:
 
-- La API no tiene autenticación ni autorización en el servidor.
-- Las contraseñas se guardan y se sirven en texto plano.
-- El servidor de archivos estáticos permite rutas fuera del proyecto.
-- El panel de administración valida el rol solo en el navegador.
+| Área | Estado |
+|---|---|
+| Rutas de archivos estáticos y descargas | ✅ restringidas al proyecto (`SEC-03`) |
+| Nombres de archivo al escribir (avatares, reportes) | ✅ saneados (`SEC-05`) |
+| Tamaño de las peticiones POST | ✅ límite de 5 MB (`SEC-10`) |
+| Cabeceras de seguridad | ✅ `nosniff`, `DENY`, `no-referrer` (`SEC-12`) |
+| Autenticación y autorización en el servidor | ❌ pendiente (`SEC-01`, `SEC-02`, `SEC-07`, `SEC-08`) |
+| Contraseñas | ❌ texto plano (`SEC-06`) |
+| Productos en código ejecutable | ❌ pendiente (`SEC-04`) |
+| XSS en el panel | ❌ pendiente (`SEC-09`) |
 
-**No exponer la aplicación a Internet** hasta resolver estos puntos. Para uso en
-red local, limitar el acceso a una VLAN o SSID de confianza.
+**No exponer la aplicación a Internet** hasta resolver los puntos pendientes. Para
+uso en red local, limitar el acceso a una VLAN o SSID de confianza.
 
 Ver `REVISION-SEGURIDAD.md` para el detalle y el plan de corrección.
 

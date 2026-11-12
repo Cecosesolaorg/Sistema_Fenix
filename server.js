@@ -43,21 +43,159 @@ const getFolderName = (aisleName) => {
 };
 
 const getContentType = (filePath) => {
-    const extname = path.extname(filePath);
+    const extname = path.extname(filePath).toLowerCase();
     switch (extname) {
-        case '.html': return 'text/html';
-        case '.js': return 'text/javascript';
-        case '.css': return 'text/css';
-        case '.json': return 'application/json';
+        case '.html': return 'text/html; charset=utf-8';
+        case '.js': return 'text/javascript; charset=utf-8';
+        case '.css': return 'text/css; charset=utf-8';
+        case '.json': return 'application/json; charset=utf-8';
         case '.png': return 'image/png';
-        case '.jpg': return 'image/jpg';
-        default: return 'text/plain';
+        case '.jpg':
+        case '.jpeg': return 'image/jpeg';
+        case '.gif': return 'image/gif';
+        case '.svg': return 'image/svg+xml';
+        case '.webp': return 'image/webp';
+        case '.ico': return 'image/x-icon';
+        case '.woff': return 'font/woff';
+        case '.woff2': return 'font/woff2';
+        default: return 'application/octet-stream';
     }
 };
+
+// ── Endurecimiento de rutas y cuerpos ───────────────────────────────────────
+const ROOT_DIR = __dirname;
+const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
+
+// Carpetas con datos personales: nunca se sirven como archivos estáticos.
+const PRIVATE_DIRS = new Set(['registros', 'inventarios base de datos', 'reportes_enviados', 'avatars', 'tools']);
+
+// Solo se entregan estas extensiones. Nada de .json (los datos viven en registros/).
+const STATIC_EXTENSIONS = new Set([
+    '.html', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif',
+    '.svg', '.webp', '.ico', '.woff', '.woff2'
+]);
+
+// Archivos del proyecto que no deben descargarse aunque su extensión esté permitida.
+const STATIC_BLOCKLIST = new Set(['server.js']);
+
+/**
+ * true si `target` está estrictamente dentro de `dir` (no el directorio mismo
+ * y no un hermano con prefijo común, ej. "datos_extra" vs "datos").
+ */
+function isInside(dir, target) {
+    const rel = path.relative(dir, target);
+    return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+}
+
+/**
+ * Limpia un nombre de archivo: quita rutas, caracteres raros, puntos iniciales
+ * y limita el largo. Devuelve `fallback` si no queda nada usable.
+ */
+function safeFileStem(value, fallback) {
+    const stem = String(value == null ? '' : value)
+        .replace(/\.xlsx$/i, '')
+        .replace(/[^A-Za-z0-9._ -]/g, '')
+        .replace(/^\.+/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 100);
+    return stem || fallback;
+}
+
+/**
+ * Traduce una URL a una ruta real dentro del proyecto, o null si escapa,
+ * apunta a una carpeta privada o usa una extensión no permitida.
+ */
+function resolveStaticPath(rawUrl) {
+    let pathname;
+    try {
+        pathname = decodeURIComponent(String(rawUrl || '/').split('?')[0].split('#')[0]);
+    } catch (e) {
+        return null; // codificación inválida
+    }
+
+    if (pathname === '/' || pathname === '') pathname = '/index.html';
+    if (pathname.includes('\0')) return null;
+
+    const resolved = path.resolve(ROOT_DIR, '.' + pathname);
+    if (!isInside(ROOT_DIR, resolved)) return null;
+
+    const relParts = path.relative(ROOT_DIR, resolved).split(path.sep);
+    if (PRIVATE_DIRS.has(relParts[0])) return null;
+    if (relParts.some(p => p === '..')) return null;
+    if (STATIC_BLOCKLIST.has(relParts[0].toLowerCase())) return null;
+
+    if (!STATIC_EXTENSIONS.has(path.extname(resolved).toLowerCase())) return null;
+
+    return resolved;
+}
+
+function serveStatic(req, res) {
+    const resolved = resolveStaticPath(req.url);
+    if (!resolved) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Not found');
+        return;
+    }
+
+    fs.stat(resolved, (err, stat) => {
+        if (err || !stat.isFile()) {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Not found');
+            return;
+        }
+
+        fs.readFile(resolved, (readErr, content) => {
+            if (readErr) {
+                const notFound = readErr.code === 'ENOENT';
+                res.writeHead(notFound ? 404 : 500);
+                res.end(notFound ? 'File not found' : 'Server error');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': getContentType(resolved),
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'Surrogate-Control': 'no-store'
+            });
+            res.end(content);
+        });
+    });
+}
 
 
 
 const requestHandler = (req, res) => {
+    // Cabeceras de seguridad para todas las respuestas
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-XSS-Protection', '0');
+
+    // Límite global de tamaño de cuerpo (todos los POST)
+    let bodyBytes = 0;
+    let bodyLimitHit = false;
+    req.on('error', () => { });
+    req.on('data', (chunk) => {
+        if (bodyLimitHit) return;
+        bodyBytes += chunk.length;
+        if (bodyBytes > MAX_BODY_BYTES) {
+            bodyLimitHit = true;
+            const payload = JSON.stringify({
+                status: 'error',
+                message: 'Cuerpo de la petición demasiado grande (máximo 5 MB)'
+            });
+            if (!res.headersSent) {
+                res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(payload, () => { try { req.destroy(); } catch (e) { } });
+            } else {
+                try { req.destroy(); } catch (e) { }
+            }
+        }
+    });
+
     if (req.method === 'GET' && req.url === '/api/users') {
         let users = [];
         if (fs.existsSync(DIRECTORY)) {
@@ -142,10 +280,16 @@ const requestHandler = (req, res) => {
         res.end(JSON.stringify(reportes));
 
     } else if (req.method === 'GET' && req.url.startsWith('/api/descargar-reporte/')) {
-        const relativeFileName = decodeURIComponent(req.url.split('/api/descargar-reporte/')[1]);
+        let relativeFileName = '';
+        try {
+            relativeFileName = decodeURIComponent(req.url.split('/api/descargar-reporte/')[1] || '');
+        } catch (e) {
+            relativeFileName = '';
+        }
         const filePath = path.resolve(REPORTES_DIR, relativeFileName);
 
-        if (filePath.startsWith(REPORTES_DIR) && fs.existsSync(filePath)) {
+        if (relativeFileName && isInside(REPORTES_DIR, filePath) &&
+            fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
             const stat = fs.statSync(filePath);
             const safeName = path.basename(filePath);
             const asciiName = safeName.replace(/[^\x20-\x7E]/g, '');
@@ -387,7 +531,11 @@ const requestHandler = (req, res) => {
                 const data = JSON.parse(body);
                 if (!data.cedula || !data.fotoBase64) throw new Error('Faltan datos');
 
-                const filepath = path.join(AVATARS_DIR, `${data.cedula}.txt`);
+                const cedula = String(data.cedula).replace(/[^0-9A-Za-z_-]/g, '');
+                if (!cedula || cedula.length > 40) throw new Error('Cédula inválida');
+
+                const filepath = path.join(AVATARS_DIR, `${cedula}.txt`);
+                if (!isInside(AVATARS_DIR, filepath)) throw new Error('Ruta inválida');
                 fs.writeFileSync(filepath, data.fotoBase64, 'utf8');
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -615,8 +763,8 @@ const requestHandler = (req, res) => {
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
-                const aisle = (data.aisleName || 'Pasillo').replace(/ /g, '_');
-                const resp = (data.responsable || 'Responsable').replace(/ /g, '_');
+                const aisle = safeFileStem(data.aisleName, 'Pasillo').replace(/\s+/g, '_');
+                const resp = safeFileStem(data.responsable, 'Responsable').replace(/\s+/g, '_');
 
                 const now = new Date();
                 const filename = `${aisle}_${resp}.json`;
@@ -627,6 +775,7 @@ const requestHandler = (req, res) => {
                 if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
                 const filepath = path.join(targetDir, filename);
+                if (!isInside(REPORTES_DIR, filepath)) throw new Error('Ruta inválida');
 
                 fs.writeFileSync(filepath, JSON.stringify(data, null, 4), 'utf8');
 
@@ -733,7 +882,7 @@ const requestHandler = (req, res) => {
 
                 const now = new Date();
                 // Usamos el nombre original limpio, sin timestamp extra para no ensuciar el nombre
-                let cleanOriginal = originalFileName.replace(/\.xlsx$/i, '').trim();
+                let cleanOriginal = safeFileStem(originalFileName, 'reporte');
                 const filename = `${cleanOriginal}.xlsx`;
 
                 const folderName = getFolderName(aisleName);
@@ -741,6 +890,7 @@ const requestHandler = (req, res) => {
                 if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
                 const xlsxPath = path.join(targetDir, filename);
+                if (!isInside(REPORTES_DIR, xlsxPath)) throw new Error('Ruta inválida');
 
                 fs.writeFileSync(xlsxPath, xlsxBuffer);
 
@@ -919,35 +1069,8 @@ const requestHandler = (req, res) => {
         });
 
     } else {
-        // Sirviendo archivos estaticos
-        let filePath = '.' + req.url;
-        // Quitar query params si existen
-        filePath = filePath.split('?')[0];
-
-        if (filePath === './') filePath = './index.html';
-
-        const contentType = getContentType(filePath);
-
-        fs.readFile(path.join(__dirname, filePath), (err, content) => {
-            if (err) {
-                if (err.code == 'ENOENT') {
-                    res.writeHead(404);
-                    res.end('File not found');
-                } else {
-                    res.writeHead(500);
-                    res.end('Server error');
-                }
-            } else {
-                res.writeHead(200, {
-                    'Content-Type': contentType,
-                    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-                    'Pragma': 'no-cache',
-                    'Expires': '0',
-                    'Surrogate-Control': 'no-store'
-                });
-                res.end(content, 'utf-8');
-            }
-        });
+        // Sirviendo archivos estaticos (solo dentro del proyecto y con extension permitida)
+        serveStatic(req, res);
     }
 };
 
