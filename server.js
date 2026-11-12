@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const auth = require('./src/auth');
 
 const PORT = 8000;   // HTTP  (fallback)
 const DIRECTORY = path.join(__dirname, 'registros');
@@ -167,6 +168,162 @@ function serveStatic(req, res) {
 
 
 
+// ── Usuarios, sesiones y respuestas ─────────────────────────────────────────
+const CEDULA_RE = /^[0-9A-Za-z_-]{1,40}$/;
+
+// Archivos de estado que viven en registros/ pero no son usuarios.
+const STATE_FILES = new Set([
+    'historial.json', 'cierres.json', 'pendientes.json',
+    'pasillos_config.json', 'qrcodes.json', 'session_control.json'
+]);
+
+function sendJson(res, status, payload) {
+    if (res.headersSent || res.writableEnded) return;
+    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(req, res, onJson) {
+    let body = '';
+    let finished = false;
+
+    req.on('data', (chunk) => {
+        if (finished || res.headersSent) return;
+        body += chunk;
+        if (body.length > MAX_BODY_BYTES) {
+            finished = true;
+            sendJson(res, 413, { status: 'error', message: 'Cuerpo de la petición demasiado grande (máximo 5 MB)' });
+        }
+    });
+
+    req.on('end', () => {
+        if (finished || res.headersSent) return;
+        finished = true;
+        let data;
+        try {
+            data = JSON.parse(body || '{}');
+        } catch (e) {
+            sendJson(res, 400, { status: 'error', message: 'JSON inválido' });
+            return;
+        }
+        onJson(data);
+    });
+}
+
+/** Lee todos los usuarios de registros/ sin exponer el nombre del archivo. */
+function readUsers() {
+    const users = [];
+    if (!fs.existsSync(DIRECTORY)) return users;
+
+    for (const file of fs.readdirSync(DIRECTORY)) {
+        if (!file.endsWith('.json') || STATE_FILES.has(file)) continue;
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(DIRECTORY, file), 'utf8'));
+            if (data && typeof data === 'object' && data.cedula) {
+                data.__file = file;
+                users.push(data);
+            }
+        } catch (e) { /* archivo corrupto: se ignora */ }
+    }
+    return users;
+}
+
+function findUserByCedula(cedula) {
+    if (!CEDULA_RE.test(String(cedula || ''))) return null;
+    return readUsers().find(u => String(u.cedula) === String(cedula)) || null;
+}
+
+/** Datos de usuario seguros para enviar al cliente (nunca contraseñas). */
+function publicUser(user) {
+    return {
+        cedula: user.cedula,
+        nombre: user.nombre,
+        role: user.role || 'user',
+        fecha: user.fecha
+    };
+}
+
+function timestampNow() {
+    const now = new Date();
+    return now.getFullYear().toString() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0') +
+        String(now.getSeconds()).padStart(2, '0');
+}
+
+/** Sesión activa de la petición, respetando los cierres remotos del panel. */
+function currentSession(req) {
+    const cookies = auth.parseCookies(req.headers.cookie);
+    const token = cookies[auth.COOKIE_NAME];
+    const session = auth.getSession(token);
+    if (!session) return null;
+
+    const globalTime = sessionControl.global_logout || 0;
+    const kickTime = (sessionControl.kicked_users || {})[session.cedula] || 0;
+    if (globalTime > session.createdAt || kickTime > session.createdAt) {
+        auth.destroySession(token);
+        return null;
+    }
+    return session;
+}
+
+// ── Límite de intentos de login ─────────────────────────────────────────────
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+const loginAttempts = new Map(); // "ip|cedula" -> { count, first }
+
+function loginKey(req, cedula) {
+    const ip = (req.socket && req.socket.remoteAddress) || 'desconocida';
+    return `${ip}|${cedula}`;
+}
+
+function isLoginBlocked(key) {
+    const record = loginAttempts.get(key);
+    if (!record) return false;
+    if (Date.now() - record.first > LOGIN_WINDOW_MS) {
+        loginAttempts.delete(key);
+        return false;
+    }
+    return record.count >= LOGIN_MAX_ATTEMPTS;
+}
+
+function recordLoginFailure(key) {
+    const now = Date.now();
+    const record = loginAttempts.get(key);
+    if (!record || now - record.first > LOGIN_WINDOW_MS) {
+        loginAttempts.set(key, { count: 1, first: now });
+    } else {
+        record.count += 1;
+    }
+}
+
+// ── Política de acceso por endpoint ─────────────────────────────────────────
+// Rutas /api/ que se pueden usar sin sesión.
+const PUBLIC_API = new Set([
+    '/api/login',
+    '/api/logout',
+    '/api/register',
+    '/api/server-ip',
+    '/api/session-status',
+    '/api/avatars'
+]);
+
+// POST que además exigen rol admin.
+const ADMIN_POST = new Set([
+    '/api/actualizar-rol',
+    '/api/limpiar-historial',
+    '/api/force-logout-all',
+    '/api/force-logout-user',
+    '/api/agregar-pasillo',
+    '/api/agregar-producto',
+    '/api/eliminar-pasillo',
+    '/api/pasillos-config',
+    '/api/resolver-pendiente',
+    '/api/cerrar-pasillo'
+]);
+
 const requestHandler = (req, res) => {
     // Cabeceras de seguridad para todas las respuestas
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -196,23 +353,101 @@ const requestHandler = (req, res) => {
         }
     });
 
+    const pathname = String(req.url || '/').split('?')[0];
+    const session = currentSession(req);
+
+    // Política de acceso: todo /api/ exige sesión salvo la lista pública.
+    if (pathname.startsWith('/api/') && !PUBLIC_API.has(pathname)) {
+        if (!session) {
+            sendJson(res, 401, { status: 'error', message: 'Sesión no válida. Volvé a ingresar.' });
+            return;
+        }
+        if (req.method === 'POST' && ADMIN_POST.has(pathname) && session.role !== 'admin') {
+            sendJson(res, 403, { status: 'error', message: 'Solo un administrador puede hacer esto.' });
+            return;
+        }
+    }
+
+    // CSRF básico: si el navegador manda Origin, tiene que coincidir con el Host.
+    if (req.method === 'POST' && req.headers.origin) {
+        let originHost = null;
+        try { originHost = new URL(req.headers.origin).host; } catch (e) { originHost = null; }
+        if (!originHost || originHost !== req.headers.host) {
+            sendJson(res, 403, { status: 'error', message: 'Origen no permitido' });
+            return;
+        }
+    }
+
     if (req.method === 'GET' && req.url === '/api/users') {
-        let users = [];
-        if (fs.existsSync(DIRECTORY)) {
-            const files = fs.readdirSync(DIRECTORY);
-            for (const file of files) {
-                if (file.endsWith('.json') && file !== 'historial.json' && file !== 'cierres.json') {
-                    try {
-                        const data = JSON.parse(fs.readFileSync(path.join(DIRECTORY, file), 'utf8'));
-                        if (data.password) {
-                            users.push(data);
-                        }
-                    } catch (e) { }
+        // Requiere sesión (cualquier rol). Nunca devuelve contraseñas ni hashes.
+        const users = readUsers().map(publicUser);
+        sendJson(res, 200, users);
+
+    } else if (req.method === 'POST' && req.url === '/api/login') {
+        readJsonBody(req, res, (data) => {
+            const cedula = String(data.cedula || '').trim();
+            const password = String(data.password || '');
+
+            if (!cedula || !password) {
+                sendJson(res, 400, { status: 'error', message: 'Cédula y contraseña son obligatorias' });
+                return;
+            }
+
+            const key = loginKey(req, cedula);
+            if (isLoginBlocked(key)) {
+                sendJson(res, 429, { status: 'error', message: 'Demasiados intentos fallidos. Esperá 5 minutos.' });
+                return;
+            }
+
+            const user = findUserByCedula(cedula);
+            const stored = user ? (user.password_hash || user.password) : null;
+
+            if (!user || !auth.verifyPassword(password, stored)) {
+                recordLoginFailure(key);
+                sendJson(res, 401, { status: 'error', message: 'Cédula o contraseña incorrecta' });
+                return;
+            }
+
+            loginAttempts.delete(key);
+
+            // Migración perezosa: la primera vez que entra, la clave pasa a scrypt.
+            if (!auth.isHashed(stored)) {
+                try {
+                    const file = user.__file;
+                    user.password_hash = auth.hashPassword(password);
+                    delete user.password;
+                    delete user.__file;
+
+                    const filepath = path.join(DIRECTORY, file || '');
+                    if (file && isInside(DIRECTORY, filepath)) {
+                        fs.writeFileSync(filepath, JSON.stringify(user, null, 4), 'utf8');
+                        try { fs.chmodSync(filepath, 0o600); } catch (e) { }
+                    }
+                } catch (e) {
+                    console.error('No se pudo migrar la contraseña a hash:', e.message);
                 }
             }
+
+            const token = auth.createSession(user);
+            res.setHeader('Set-Cookie', auth.sessionCookie(token));
+            sendJson(res, 200, { status: 'success', user: publicUser(user) });
+        });
+
+    } else if (req.method === 'POST' && req.url === '/api/logout') {
+        const cookies = auth.parseCookies(req.headers.cookie);
+        auth.destroySession(cookies[auth.COOKIE_NAME]);
+        res.setHeader('Set-Cookie', auth.clearSessionCookie());
+        sendJson(res, 200, { status: 'success' });
+
+    } else if (req.method === 'GET' && req.url === '/api/me') {
+        if (!session) {
+            sendJson(res, 401, { status: 'error', message: 'No autenticado' });
+        } else {
+            sendJson(res, 200, {
+                status: 'success',
+                user: { cedula: session.cedula, nombre: session.nombre, role: session.role }
+            });
         }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(users));
 
     } else if (req.method === 'GET' && req.url === '/api/listar-reportes') {
         let reportes = [];
@@ -306,62 +541,53 @@ const requestHandler = (req, res) => {
         }
 
     } else if (req.method === 'POST' && req.url === '/api/register') {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
+        // Alta pública de usuarios. El rol SIEMPRE es 'user': el cliente no puede
+        // escalar privilegios ni sobrescribir una cédula existente.
+        readJsonBody(req, res, (data) => {
             try {
-                const data = JSON.parse(body);
-                const cedula = data.cedula || 'unknown';
-                const nombre = data.nombre || 'Usuario';
+                const cedula = String(data.cedula || '').trim();
+                const nombre = String(data.nombre || '').trim();
+                const password = String(data.password || '');
 
-                // Asignar rol por defecto
-                data.role = data.role || 'user';
+                if (!CEDULA_RE.test(cedula)) throw new Error('Cédula inválida');
+                if (!nombre) throw new Error('Falta el nombre');
+                if (nombre.length > 80) throw new Error('Nombre demasiado largo');
+                if (password.length < 4) throw new Error('La contraseña debe tener al menos 4 caracteres');
+                if (password.length > 200) throw new Error('Contraseña demasiado larga');
 
-                let safe_cedula = cedula.replace(/[^a-zA-Z0-9]/g, '');
-                let safe_nombre = nombre.replace(/[^a-zA-Z0-9]/g, '_');
-                if (!safe_cedula) safe_cedula = 'unknown';
-                if (!safe_nombre) safe_nombre = 'Usuario';
-
-                let existingFilename = null;
-                if (fs.existsSync(DIRECTORY)) {
-                    const files = fs.readdirSync(DIRECTORY);
-                    for (const file of files) {
-                        if (file.endsWith('.json') && file.includes(`_${safe_cedula}_`)) {
-                            existingFilename = file;
-                            break;
-                        }
-                    }
+                if (findUserByCedula(cedula)) {
+                    sendJson(res, 409, {
+                        status: 'error',
+                        message: 'Esta cédula ya está registrada. Iniciá sesión.'
+                    });
+                    return;
                 }
 
-                let filepath;
-                if (existingFilename) {
-                    filepath = path.join(DIRECTORY, existingFilename);
-                    try {
-                        // Preservar datos originales importantes si es una actualización (ej: durante login)
-                        const oldData = JSON.parse(fs.readFileSync(filepath, 'utf8'));
-                        data.role = oldData.role || data.role;
-                        data.fecha = oldData.fecha || data.fecha;
-                    } catch (e) { }
-                } else {
-                    const now = new Date();
-                    const timestamp = now.getFullYear().toString() +
-                        String(now.getMonth() + 1).padStart(2, '0') +
-                        String(now.getDate()).padStart(2, '0') + '_' +
-                        String(now.getHours()).padStart(2, '0') +
-                        String(now.getMinutes()).padStart(2, '0') +
-                        String(now.getSeconds()).padStart(2, '0');
+                const safeNombre = nombre.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 60) || 'Usuario';
+                const record = {
+                    cedula,
+                    nombre,
+                    password_hash: auth.hashPassword(password),
+                    fecha: new Date().toISOString(),
+                    role: 'user'
+                };
 
-                    const filename = `${safe_nombre}_${safe_cedula}_${timestamp}.json`;
-                    filepath = path.join(DIRECTORY, filename);
-                }
+                const filepath = path.join(DIRECTORY, `${safeNombre}_${cedula}_${timestampNow()}.json`);
+                if (!isInside(DIRECTORY, filepath)) throw new Error('Ruta inválida');
 
-                fs.writeFileSync(filepath, JSON.stringify(data, null, 4), 'utf8');
+                fs.writeFileSync(filepath, JSON.stringify(record, null, 4), 'utf8');
+                try { fs.chmodSync(filepath, 0o600); } catch (e) { }
 
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'success', message: 'Registrado correctamente' }));
+                // Auto-login tras registrarse.
+                const token = auth.createSession(record);
+                res.setHeader('Set-Cookie', auth.sessionCookie(token));
+                sendJson(res, 200, {
+                    status: 'success',
+                    message: 'Registrado correctamente',
+                    user: publicUser(record)
+                });
             } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'error', message: e.message }));
+                sendJson(res, 400, { status: 'error', message: e.message });
             }
         });
 
@@ -373,6 +599,8 @@ const requestHandler = (req, res) => {
                 const data = JSON.parse(body);
                 const { cedula, newRole } = data;
                 if (!cedula || !newRole) throw new Error('Faltan datos');
+                if (!CEDULA_RE.test(String(cedula))) throw new Error('Cédula inválida');
+                if (!['user', 'coordinador', 'admin'].includes(newRole)) throw new Error('Rol inválido');
 
                 let updated = false;
                 if (fs.existsSync(DIRECTORY)) {
@@ -393,6 +621,8 @@ const requestHandler = (req, res) => {
                 }
 
                 if (updated) {
+                    // El rol cambia: forzamos re-login para que la sesión lo refleje.
+                    auth.destroySessionsForUser(cedula);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ status: 'success', message: 'Rol actualizado correctamente' }));
                 } else {
@@ -533,6 +763,12 @@ const requestHandler = (req, res) => {
 
                 const cedula = String(data.cedula).replace(/[^0-9A-Za-z_-]/g, '');
                 if (!cedula || cedula.length > 40) throw new Error('Cédula inválida');
+
+                // Cada usuario cambia su avatar; solo admin puede tocar el de otro.
+                if (session && session.role !== 'admin' && String(session.cedula) !== cedula) {
+                    sendJson(res, 403, { status: 'error', message: 'No podés cambiar el avatar de otro usuario' });
+                    return;
+                }
 
                 const filepath = path.join(AVATARS_DIR, `${cedula}.txt`);
                 if (!isInside(AVATARS_DIR, filepath)) throw new Error('Ruta inválida');
@@ -940,8 +1176,10 @@ const requestHandler = (req, res) => {
             try {
                 const { cedula } = JSON.parse(body);
                 if (cedula) {
+                    if (!CEDULA_RE.test(String(cedula))) throw new Error('Cédula inválida');
                     sessionControl.kicked_users[cedula] = Date.now();
                     saveSessionControl();
+                    auth.destroySessionsForUser(cedula);
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'success' }));

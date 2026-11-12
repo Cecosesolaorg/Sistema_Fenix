@@ -61,13 +61,26 @@ Estado actual del proyecto:
 | Nombres de archivo al escribir (avatares, reportes) | ✅ saneados (`SEC-05`) |
 | Tamaño de las peticiones POST | ✅ límite de 5 MB (`SEC-10`) |
 | Cabeceras de seguridad | ✅ `nosniff`, `DENY`, `no-referrer` (`SEC-12`) |
-| Autenticación y autorización en el servidor | ❌ pendiente (`SEC-01`, `SEC-02`, `SEC-07`, `SEC-08`) |
-| Contraseñas | ❌ texto plano (`SEC-06`) |
+| Autenticación y autorización en el servidor | ✅ sesión + roles (`SEC-01`, `SEC-02`, `SEC-07`, `SEC-08`) |
+| Contraseñas | ✅ scrypt en reposo; nunca se envían al cliente (`SEC-06`) |
+| Cifrado en tránsito | ❌ HTTP plano en la red local |
 | Productos en código ejecutable | ❌ pendiente (`SEC-04`) |
 | XSS en el panel | ❌ pendiente (`SEC-09`) |
 
-**No exponer la aplicación a Internet** hasta resolver los puntos pendientes. Para
-uso en red local, limitar el acceso a una VLAN o SSID de confianza.
+### Cómo funciona el acceso
+
+- `POST /api/login` valida cédula y contraseña en el servidor y devuelve una
+  cookie `HttpOnly`, `SameSite=Lax`, válida 12 horas.
+- La contraseña nunca llega al navegador ni se guarda en `localStorage`.
+- `GET /api/users` exige sesión y devuelve solo nombre, cédula y rol.
+- Las acciones de administración (roles, expulsiones, pasillos, historial)
+  exigen rol `admin` en el servidor.
+- Hay límite de 5 intentos fallidos por cédula y IP cada 5 minutos.
+- Las contraseñas en texto plano de versiones anteriores se convierten a hash
+  (`scrypt`) automáticamente la primera vez que cada usuario inicia sesión.
+
+**No exponer la aplicación a Internet** mientras use HTTP plano. Para uso en red
+local, limitar el acceso a una VLAN o SSID de confianza.
 
 Ver `REVISION-SEGURIDAD.md` para el detalle y el plan de corrección.
 

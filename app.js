@@ -12,24 +12,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let selectedRole = 'user';
 
-    // Auto-login check
+    // Auto-login check: la cookie del servidor manda, no el localStorage.
     (function checkSession() {
-        const savedUser = localStorage.getItem('currentUser');
-        if (savedUser) {
-            try {
-                const user = JSON.parse(savedUser);
-                if (user && (user.role === 'admin' || user.role === 'coordinador')) {
-                    selectedRole = user.role;
+        let cached = null;
+        try { cached = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch (e) { cached = null; }
+        if (!cached) {
+            window.location.href = 'index.html';
+            return;
+        }
+
+        fetch('/api/me', { cache: 'no-store' })
+            .then(response => {
+                if (response.status === 401) {
+                    window.location.href = 'index.html';
+                    return null;
+                }
+                if (!response.ok) throw new Error('sin servidor');
+                return response.json();
+            })
+            .then(data => {
+                if (!data || !data.user) return;
+                if (data.user.role !== 'admin' && data.user.role !== 'coordinador') {
+                    window.location.href = 'index.html';
+                    return;
+                }
+                selectedRole = data.user.role;
+                localStorage.setItem('currentUser', JSON.stringify({
+                    cedula: data.user.cedula,
+                    nombre: data.user.nombre,
+                    role: data.user.role,
+                    login_time: cached.login_time || Date.now()
+                }));
+                updateUserSession(selectedRole);
+            })
+            .catch(() => {
+                // Sin red: permitir la caché si el rol local es suficiente.
+                if (cached.role === 'admin' || cached.role === 'coordinador') {
+                    selectedRole = cached.role;
                     updateUserSession(selectedRole);
                 } else {
                     window.location.href = 'index.html';
                 }
-            } catch (e) {
-                window.location.href = 'index.html';
-            }
-        } else {
-            window.location.href = 'index.html';
-        }
+            });
     })();
 
     // Function to update the session data in the dashboard header and apply role permissions
@@ -327,10 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
                 <td>${u.cedula || '—'}</td>
                 <td>
-                    <span id="pwd-text-${i}" style="font-family: monospace; letter-spacing: 2px;">••••</span>
-                    <button onclick="togglePwdVis(${i}, '${u.password || ''}')" style="background: none; border: none; cursor: pointer; color: var(--text-muted); margin-left: 8px;">
-                        <i id="pwd-icon-${i}" class="fa-solid fa-eye"></i>
-                    </button>
+                    <span style="font-family: monospace; letter-spacing: 2px; color: var(--text-muted);" title="Contraseña cifrada: no se puede mostrar">••••••</span>
                 </td>
                 <td>${roleHtml}</td>
                 <td>${fecha}</td>
@@ -389,26 +410,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (searchEl) searchEl.focus();
     };
 
-    // Lógica para ojito de la contraseña
-    window.togglePwdVis = function (index, pwdStr) {
-        if (!pwdStr) pwdStr = 'N/A';
-        const txtEl = document.getElementById(`pwd-text-${index}`);
-        const iconEl = document.getElementById(`pwd-icon-${index}`);
+    // Las contraseñas ya no viajan al navegador: la columna muestra solo puntos.
 
-        if (txtEl.textContent === '••••') {
-            // Mostrar contraseña
-            txtEl.textContent = pwdStr;
-            txtEl.style.letterSpacing = 'normal';
-            iconEl.classList.remove('fa-eye');
-            iconEl.classList.add('fa-eye-slash');
-        } else {
-            // Ocultar contraseña
-            txtEl.textContent = '••••';
-            txtEl.style.letterSpacing = '2px';
-            iconEl.classList.remove('fa-eye-slash');
-            iconEl.classList.add('fa-eye');
-        }
-    };
 
     window.forzarCierreGlobal = function () {
         if (!confirm("¿ESTÁS SEGURO? Todos los teléfonos activos regresarán al login inmediatamente y perderán cualquier conteo activo no guardado.")) return;
@@ -445,11 +448,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Primero intenta el servidor; si falla, usa localStorage
         fetch('/api/users')
             .then(res => {
+                if (res.status === 401) {
+                    window.location.href = 'index.html';
+                    const err = new Error('unauthorized');
+                    err.code = 401;
+                    throw err;
+                }
                 if (!res.ok) throw new Error('server error');
                 return res.json();
             })
             .then(users => renderUsuarios(users, countEl, tbody, false))
-            .catch(() => {
+            .catch((err) => {
+                if (err && err.code === 401) return;
                 const stored = JSON.parse(localStorage.getItem('registeredUsers')) || [];
                 renderUsuarios(stored, countEl, tbody, true);
             });

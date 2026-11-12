@@ -1,23 +1,25 @@
-// ─── SINCRONIZAR USUARIOS DEL SERVIDOR ───
-(function () {
-    fetch('/api/users')
-        .then(r => r.json())
+// ─── CACHÉ DE USUARIOS (solo con sesión iniciada) ───
+// Se guardan nombre/cédula/rol para el selector de compañeros sin conexión.
+// Nunca se guardan contraseñas.
+function sincronizarUsuariosCache() {
+    fetch('/api/users', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
         .then(serverUsers => {
-            if (Array.isArray(serverUsers) && serverUsers.length > 0) {
-                // Mezclar los usuarios locales con los del servidor para no perder ninguno
-                let localUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-                let combined = [...serverUsers];
-                localUsers.forEach(lu => {
-                    if (!combined.find(cu => cu.cedula === lu.cedula)) {
-                        combined.push(lu);
-                    }
-                });
-                localStorage.setItem('registeredUsers', JSON.stringify(combined));
-            }
+            if (!Array.isArray(serverUsers)) return;
+            const limpios = serverUsers.map(u => ({
+                cedula: u.cedula,
+                nombre: u.nombre,
+                role: u.role || 'user'
+            }));
+            localStorage.setItem('registeredUsers', JSON.stringify(limpios));
         })
-        .catch(e => console.log('Trabajando de forma local, no se pudo conectar al servidor para sincronizar usuarios.'));
+        .catch(() => { });
+}
 
-    // ─── SINCRONIZAR AVATARES DEL SERVIDOR ───
+// ─── SINCRONIZAR AVATARES DEL SERVIDOR ───
+(function () {
+    if (localStorage.getItem('currentUser')) sincronizarUsuariosCache();
+
     fetch('/api/avatars')
         .then(r => r.json())
         .then(avatars => {
@@ -34,28 +36,75 @@
         .catch(e => console.log('Trabajando de forma local, no se pudo conectar al servidor para sincronizar avatares.'));
 })();
 
-// ─── AUTO-LOGIN: si ya hay sesión activa, saltar al menú de pasillos ───
-(function () {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-        try {
-            const user = JSON.parse(savedUser);
-            if (user && user.nombre) {
-                // Ocultar registro, mostrar pasillos directamente
-                document.getElementById('register-screen').style.display = 'none';
-                document.getElementById('selection-screen').style.display = 'flex';
-                document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + user.nombre.toUpperCase();
+// ─── SESIÓN LOCAL: espejo de la cookie HttpOnly del servidor ───
+// El servidor es la autoridad; esto es solo caché para la interfaz.
+function guardarSesionLocal(user, loginTime) {
+    const actual = {
+        cedula: user.cedula,
+        nombre: user.nombre,
+        role: user.role || 'user',
+        login_time: loginTime || Date.now()
+    };
+    localStorage.setItem('currentUser', JSON.stringify(actual));
 
-                if (user.role === 'admin' || user.role === 'coordinador') {
-                    document.getElementById('btn-ir-sistema-interno').style.display = 'inline-flex';
-                }
-                // Renderizar pasillos en auto-login
-                setTimeout(function () {
-                    if (typeof renderizarPasillosInicio === 'function') renderizarPasillosInicio();
-                }, 100);
-            }
-        } catch (e) { /* si el JSON está roto, pedir login normal */ }
+    // Caché de nombres para el modo sin conexión. Nunca se guardan contraseñas.
+    let usuarios = [];
+    try { usuarios = JSON.parse(localStorage.getItem('registeredUsers') || '[]'); } catch (e) { usuarios = []; }
+    if (!Array.isArray(usuarios)) usuarios = [];
+
+    const existente = usuarios.find(u => u && u.cedula === actual.cedula);
+    if (existente) {
+        existente.nombre = actual.nombre;
+        existente.role = actual.role;
+        delete existente.password;
+    } else {
+        usuarios.push({ cedula: actual.cedula, nombre: actual.nombre, role: actual.role });
     }
+    localStorage.setItem('registeredUsers', JSON.stringify(usuarios));
+
+    // Refrescar la lista real de compañeros (ya hay cookie de sesión).
+    if (typeof sincronizarUsuariosCache === 'function') sincronizarUsuariosCache();
+
+    return actual;
+}
+
+function mostrarPantallaPasillos(user) {
+    document.getElementById('register-screen').style.display = 'none';
+    document.getElementById('selection-screen').style.display = 'flex';
+    document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + user.nombre.toUpperCase();
+
+    if (user.role === 'admin' || user.role === 'coordinador') {
+        document.getElementById('btn-ir-sistema-interno').style.display = 'inline-flex';
+    }
+    setTimeout(function () {
+        if (typeof renderizarPasillosInicio === 'function') renderizarPasillosInicio();
+    }, 100);
+}
+
+// ─── AUTO-LOGIN: valida la cookie contra el servidor ───
+(function () {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch (e) { cached = null; }
+    if (!cached || !cached.nombre) return;
+
+    fetch('/api/me', { cache: 'no-store' })
+        .then(response => {
+            if (response.status === 401) {
+                localStorage.removeItem('currentUser');
+                return null;
+            }
+            if (!response.ok) throw new Error('sin servidor');
+            return response.json();
+        })
+        .then(data => {
+            if (!data || !data.user) return;
+            const user = guardarSesionLocal(data.user, cached.login_time);
+            mostrarPantallaPasillos(user);
+        })
+        .catch(() => {
+            // Sin red pero con sesión cacheada: no cortamos el trabajo en curso.
+            mostrarPantallaPasillos(cached);
+        });
 })();
 
 function cerrarSesion() {
@@ -70,6 +119,12 @@ function cerrarSesion() {
             }).catch(() => { });
         }
     } catch (e) { }
+
+    // Destruir la sesión del servidor. keepalive para que llegue antes de navegar.
+    try {
+        fetch('/api/logout', { method: 'POST', keepalive: true }).catch(() => { });
+    } catch (e) { }
+
     localStorage.removeItem('currentUser');
 
     // En lugar de recargar la página (que puede causar bucles o pantallas en blanco),
@@ -144,80 +199,55 @@ document.getElementById('auth-form').addEventListener('submit', function (e) {
     const password = document.getElementById('reg-password').value;
 
     if (!isLoginMode) {
-        // Modo Registro
-        const nombre = document.getElementById('reg-nombre').value;
-        const newUser = { cedula, nombre, password, fecha: new Date().toISOString(), role: 'user' };
+        // Modo Registro: el servidor crea el usuario con rol 'user' y abre la sesión.
+        const nombre = document.getElementById('reg-nombre').value.trim();
+        if (!nombre) { alert('Ingresá tu nombre.'); return; }
 
-        let registeredUsers = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-        // Check si ya existe
-        if (registeredUsers.find(u => u.cedula === cedula)) {
-            alert("Esta cédula ya está registrada. Por favor inicia sesión.");
-            return;
-        }
-
-        registeredUsers.push(newUser);
-        localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-
-        try {
-            fetch('/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newUser)
-            }).then(response => {
-                console.log("Usuario guardado en la carpeta de registros");
-            }).catch(error => {
-                console.error("Error de red al guardar en el servidor:", error);
-            });
-        } catch (err) {
-            console.error("Error al ejecutar fetch (posiblemente usando file://):", err);
-        }
-
-        // El rol por defecto al registrarse es user
-        let role = 'user';
-
-        localStorage.setItem('currentUser', JSON.stringify({ cedula, nombre, role, login_time: Date.now() }));
-        document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + nombre.toUpperCase();
-
-        // Registrar nuevo registro en historial
-        fetch('/api/historial', {
+        fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario: nombre, accion: 'Se registró en el sistema' })
-        }).catch(() => { });
-
-        transitionToPasillos();
+            body: JSON.stringify({ cedula, nombre, password })
+        })
+            .then(async (response) => {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    alert(data.message || 'No se pudo completar el registro.');
+                    return;
+                }
+                guardarSesionLocal(data.user);
+                document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + data.user.nombre.toUpperCase();
+                fetch('/api/historial', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario: data.user.nombre, accion: 'Se registró en el sistema' })
+                }).catch(() => { });
+                transitionToPasillos();
+            })
+            .catch(() => alert('No se pudo conectar con el servidor. Verificá la red WiFi.'));
 
     } else {
-        // Modo Iniciar Sesión
-        let registeredUsers = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-        let user = registeredUsers.find(u => u.cedula === cedula && u.password === password);
-
-        if (user) {
-            let role = user.role || 'user';
-
-            localStorage.setItem('currentUser', JSON.stringify({ cedula: user.cedula, nombre: user.nombre, role, login_time: Date.now() }));
-            document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + user.nombre.toUpperCase();
-
-            // ── Sincronización Silenciosa ──
-            // Si el trabajador se registró sin internet (offline), su usuario está local en su teléfono.
-            // Al hacer login, aprovechamos de validar y enviarlo al servidor real si hay conexión.
-            fetch('/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(user)
-            }).catch(() => { });
-
-            // Registrar inicio de sesión en historial
-            fetch('/api/historial', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ usuario: user.nombre, accion: 'Inició sesión' })
-            }).catch(() => { });
-
-            transitionToPasillos();
-        } else {
-            alert("Cédula o contraseña incorrecta.");
-        }
+        // Modo Iniciar Sesión: la contraseña la valida el servidor, no el navegador.
+        fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cedula, password })
+        })
+            .then(async (response) => {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    alert(data.message || 'Cédula o contraseña incorrecta.');
+                    return;
+                }
+                guardarSesionLocal(data.user);
+                document.getElementById('welcome-message').textContent = 'BIENVENIDO, ' + data.user.nombre.toUpperCase();
+                fetch('/api/historial', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario: data.user.nombre, accion: 'Inició sesión' })
+                }).catch(() => { });
+                transitionToPasillos();
+            })
+            .catch(() => alert('No se pudo conectar con el servidor. Verificá la red WiFi.'));
     }
 });
 
