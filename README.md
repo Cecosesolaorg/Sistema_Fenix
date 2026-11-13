@@ -85,6 +85,11 @@ Estado actual del proyecto:
   de insertarse en el HTML (`src/seguridad.js`). El servidor además rechaza
   nombres con etiquetas HTML, avatares que no sean imágenes y pasillos con
   caracteres reservados.
+- El panel tiene **Preferencias de inventario** (solo admin): modo de la
+  calculadora y si se pide opinión al exportar. Se guardan en
+  `registros/settings.json` y se aplican a todos los teléfonos.
+- Los comentarios que dejan los trabajadores se guardan en
+  `registros/feedback.json` y se leen en **Comentarios** (solo admin).
 - Hay límite de 5 intentos fallidos por cédula y IP cada 5 minutos.
 - Las contraseñas en texto plano de versiones anteriores se convierten a hash
   (`scrypt`) automáticamente al arrancar el servidor y también la primera vez

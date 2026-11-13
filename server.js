@@ -186,7 +186,8 @@ const NOMBRE_RE = /^[\p{L}\p{N} .,'_\-]{1,80}$/u;
 // Archivos de estado que viven en registros/ pero no son usuarios.
 const STATE_FILES = new Set([
     'historial.json', 'cierres.json', 'pendientes.json',
-    'pasillos_config.json', 'qrcodes.json', 'session_control.json'
+    'pasillos_config.json', 'qrcodes.json', 'session_control.json',
+    'settings.json', 'feedback.json'
 ]);
 
 function sendJson(res, status, payload) {
@@ -353,6 +354,73 @@ function productsScript() {
     return body;
 }
 
+// ── Ajustes de la aplicación ────────────────────────────────────────────────
+// Los trabajadores consultan estos valores al abrir la calculadora y al
+// exportar un Excel. Solo un admin los puede cambiar.
+const SETTINGS_PATH = path.join(DIRECTORY, 'settings.json');
+const INVENTORY_MODES = new Set(['calculator', 'quick_notes']);
+const DEFAULT_SETTINGS = { inventoryMode: 'calculator', enableFeedback: false };
+
+/** Lee los ajustes, ignorando cualquier valor fuera de rango. */
+function readSettings() {
+    const ajustes = Object.assign({}, DEFAULT_SETTINGS);
+    try {
+        const guardado = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+        if (guardado && typeof guardado === 'object' && !Array.isArray(guardado)) {
+            if (INVENTORY_MODES.has(guardado.inventoryMode)) ajustes.inventoryMode = guardado.inventoryMode;
+            if (typeof guardado.enableFeedback === 'boolean') ajustes.enableFeedback = guardado.enableFeedback;
+        }
+    } catch (e) { /* sin archivo o corrupto: valores por defecto */ }
+    return ajustes;
+}
+
+/** Escritura atómica de los ajustes con permisos privados. */
+function writeSettings(ajustes) {
+    const tmp = SETTINGS_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(ajustes, null, 4) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, SETTINGS_PATH);
+    try { fs.chmodSync(SETTINGS_PATH, 0o600); } catch (e) { }
+}
+
+// ── Comentarios de los trabajadores ─────────────────────────────────────────
+const FEEDBACK_PATH = path.join(DIRECTORY, 'feedback.json');
+const MAX_FEEDBACK = 2000;
+
+/** Texto de una línea: sin controles, espacios normalizados y largo acotado. */
+function cleanSingleLine(value, max) {
+    return String(value == null ? '' : value)
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, max);
+}
+
+/** Texto con saltos de línea: conserva párrafos, quita controles raros. */
+function cleanMultiline(value, max) {
+    return String(value == null ? '' : value)
+        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, max);
+}
+
+function readFeedback() {
+    try {
+        const lista = JSON.parse(fs.readFileSync(FEEDBACK_PATH, 'utf8'));
+        return Array.isArray(lista) ? lista : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function writeFeedback(lista) {
+    const tmp = FEEDBACK_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(lista, null, 4) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, FEEDBACK_PATH);
+    try { fs.chmodSync(FEEDBACK_PATH, 0o600); } catch (e) { }
+}
+
 function migratePlaintextPasswords() {
     let migrated = 0;
     let weak = 0;
@@ -451,7 +519,8 @@ const ADMIN_POST = new Set([
     '/api/eliminar-pasillo',
     '/api/pasillos-config',
     '/api/resolver-pendiente',
-    '/api/cerrar-pasillo'
+    '/api/cerrar-pasillo',
+    '/api/settings'
 ]);
 
 const requestHandler = (req, res) => {
@@ -587,6 +656,75 @@ const requestHandler = (req, res) => {
                 status: 'success',
                 user: { cedula: session.cedula, nombre: session.nombre, role: session.role }
             });
+        }
+
+    } else if (req.method === 'GET' && req.url === '/api/settings') {
+        sendJson(res, 200, readSettings());
+
+    } else if (req.method === 'POST' && req.url === '/api/settings') {
+        readJsonBody(req, res, (data) => {
+            const ajustes = readSettings();
+
+            if (data.inventoryMode !== undefined) {
+                if (!INVENTORY_MODES.has(data.inventoryMode)) {
+                    sendJson(res, 400, { status: 'error', message: 'Modo de inventario inválido' });
+                    return;
+                }
+                ajustes.inventoryMode = data.inventoryMode;
+            }
+
+            if (data.enableFeedback !== undefined) {
+                if (typeof data.enableFeedback !== 'boolean') {
+                    sendJson(res, 400, { status: 'error', message: 'Valor de opinión inválido' });
+                    return;
+                }
+                ajustes.enableFeedback = data.enableFeedback;
+            }
+
+            try {
+                writeSettings(ajustes);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudieron guardar los ajustes' });
+                return;
+            }
+
+            sendJson(res, 200, { status: 'success', settings: ajustes });
+        });
+
+    } else if (req.method === 'POST' && req.url === '/api/feedback') {
+        readJsonBody(req, res, (data) => {
+            const pasillo = cleanSingleLine(data.pasillo, 80);
+            const mensaje = cleanMultiline(data.mensaje, 1000);
+
+            if (!mensaje) {
+                sendJson(res, 400, { status: 'error', message: 'Escribí un comentario antes de enviar' });
+                return;
+            }
+
+            const lista = readFeedback();
+            lista.unshift({
+                pasillo,
+                mensaje,
+                usuario: (session && session.nombre) || 'Desconocido',
+                cedula: (session && session.cedula) || '',
+                fecha: new Date().toISOString()
+            });
+
+            try {
+                writeFeedback(lista.slice(0, MAX_FEEDBACK));
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo guardar el comentario' });
+                return;
+            }
+
+            sendJson(res, 200, { status: 'success' });
+        });
+
+    } else if (req.method === 'GET' && req.url === '/api/feedback') {
+        if (!session || session.role !== 'admin') {
+            sendJson(res, 403, { status: 'error', message: 'Solo un administrador puede ver los comentarios' });
+        } else {
+            sendJson(res, 200, readFeedback().slice(0, 200));
         }
 
     } else if (req.method === 'POST' && req.url === '/api/change-password') {

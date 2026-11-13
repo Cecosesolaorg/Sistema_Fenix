@@ -1411,12 +1411,132 @@ async function actualizarKpisDashboard() {
     }
 }
 
+// ==========================================
+// PREFERENCIAS DE INVENTARIO (solo admin)
+// ==========================================
+function etiquetaFeedback() {
+    const chk = document.getElementById('set-enable-feedback');
+    const lbl = document.getElementById('set-enable-feedback-label');
+    if (chk && lbl) lbl.textContent = chk.checked ? 'Activado' : 'Desactivado';
+}
+
+async function cargarSettings() {
+    const sel = document.getElementById('set-inventory-mode');
+    const chk = document.getElementById('set-enable-feedback');
+    if (!sel || !chk) return;
+
+    try {
+        const res = await fetch('/api/settings', { cache: 'no-store' });
+        if (!res.ok) return;
+        const ajustes = await res.json();
+        sel.value = ajustes.inventoryMode === 'quick_notes' ? 'quick_notes' : 'calculator';
+        chk.checked = ajustes.enableFeedback === true;
+        etiquetaFeedback();
+    } catch (e) {
+        console.error('No se pudieron cargar las preferencias:', e);
+    }
+}
+
+async function guardarSettings() {
+    const sel = document.getElementById('set-inventory-mode');
+    const chk = document.getElementById('set-enable-feedback');
+    const estado = document.getElementById('set-status');
+    if (!sel || !chk) return;
+
+    if (estado) estado.textContent = 'Guardando...';
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                inventoryMode: sel.value,
+                enableFeedback: chk.checked
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || 'No se pudo guardar');
+
+        if (estado) estado.textContent = '';
+        mostrarToastSistema('Preferencias guardadas');
+    } catch (e) {
+        if (estado) estado.textContent = 'Error: ' + e.message;
+        mostrarToastSistema('No se pudieron guardar las preferencias');
+    }
+}
+
+window.cargarSettings = cargarSettings;
+window.guardarSettings = guardarSettings;
+
+// ==========================================
+// COMENTARIOS DE LOS TRABAJADORES (solo admin)
+// ==========================================
+async function cargarComentarios() {
+    const cont = document.getElementById('comentarios-lista');
+    if (!cont) return;
+
+    cont.innerHTML = '<p style="color: var(--text-muted); padding: 20px 0; text-align: center;">Cargando comentarios...</p>';
+
+    try {
+        const res = await fetch('/api/feedback', { cache: 'no-store' });
+        if (res.status === 403) {
+            cont.innerHTML = '<p style="color: var(--text-muted); padding: 20px 0; text-align: center;">Solo un administrador puede ver los comentarios.</p>';
+            return;
+        }
+        if (!res.ok) throw new Error('No se pudieron cargar los comentarios');
+
+        const lista = await res.json();
+        if (!Array.isArray(lista) || lista.length === 0) {
+            cont.innerHTML = '<p style="color: var(--text-muted); padding: 20px 0; text-align: center;">Todavía no hay comentarios.</p>';
+            return;
+        }
+
+        cont.innerHTML = '';
+        lista.forEach(c => {
+            const fecha = new Date(c.fecha);
+            const fechaTxt = isNaN(fecha.getTime()) ? '' : fecha.toLocaleString();
+            const fila = document.createElement('div');
+            fila.style.cssText = 'padding: 14px 0; border-bottom: 1px solid var(--border-color);';
+            fila.innerHTML = `
+                <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <strong style="font-size: 0.92rem;">${esc(c.usuario || 'Desconocido')}</strong>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">${esc(fechaTxt)}</span>
+                </div>
+                <p style="margin: 6px 0 0 0; white-space: pre-wrap; line-height: 1.45;">${esc(c.mensaje || '')}</p>
+                ${c.pasillo ? `<span style="display: inline-block; margin-top: 8px; font-size: 0.75rem; background: rgba(103,58,183,0.1); color: #673ab7; padding: 3px 10px; border-radius: 20px; font-weight: 600;">${esc(c.pasillo)}</span>` : ''}
+            `;
+            cont.appendChild(fila);
+        });
+    } catch (e) {
+        console.error('Error cargando comentarios:', e);
+        cont.innerHTML = '<p style="color: var(--text-muted); padding: 20px 0; text-align: center;">No se pudieron cargar los comentarios.</p>';
+    }
+}
+
+window.cargarComentarios = cargarComentarios;
+
 // Llamar la carga al iniciar
 document.addEventListener('DOMContentLoaded', () => {
     // El dashboard carga reportes e historial al inicio
     cargarReportes();
     cargarHistorial();
     renderPasillosView();
+
+    // Preferencias: se cargan al entrar y se guardan al cambiarlas
+    cargarSettings();
+    const selModo = document.getElementById('set-inventory-mode');
+    const chkFeedback = document.getElementById('set-enable-feedback');
+    if (selModo) selModo.addEventListener('change', guardarSettings);
+    if (chkFeedback) {
+        chkFeedback.addEventListener('change', function () {
+            etiquetaFeedback();
+            guardarSettings();
+        });
+    }
+
+    const comentariosNavBtn = document.querySelector('[data-target="view-comentarios"]');
+    if (comentariosNavBtn) {
+        comentariosNavBtn.addEventListener('click', cargarComentarios);
+    }
 
     // Iniciar polling de productos pendientes
     setInterval(cargarNotificacionesPendientes, 10000);

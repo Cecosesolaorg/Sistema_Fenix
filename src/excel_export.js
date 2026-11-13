@@ -302,6 +302,100 @@ window.ExportApp = {
 };
 
 
+// ── MODAL DE OPINIÓN DEL TRABAJADOR ─────────────────────────────────────────
+// Se muestra al exportar un Excel si el admin activó «Pedir opinión».
+window.InventoryCore = window.InventoryCore || {};
+
+window.InventoryCore.showFeedbackModal = function (pasillo, usuario) {
+    if (document.getElementById('fenix-feedback-overlay')) return;
+    // Una sola vez por sesión de pasillo: descargar y enviar no preguntan dos veces.
+    if (window.__feedbackMostrado) return;
+    window.__feedbackMostrado = true;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fenix-feedback-overlay';
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 9500; display: flex; align-items: center; justify-content: center; padding: 20px;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width: 100%; max-width: 420px; background: #1a1a2e; color: #fff; border-radius: 18px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);';
+
+    const titulo = document.createElement('h3');
+    titulo.textContent = '¿Cómo te fue en el pasillo?';
+    titulo.style.cssText = 'margin: 0 0 6px 0; font-size: 1.15rem; color: #f1c40f;';
+
+    const sub = document.createElement('p');
+    sub.textContent = pasillo ? `Pasillo: ${pasillo}` : usuario ? `Gracias, ${usuario}.` : 'Contanos si algo faltó o falló.';
+    sub.style.cssText = 'margin: 0 0 14px 0; font-size: 0.85rem; color: #bbb;';
+
+    const area = document.createElement('textarea');
+    area.placeholder = 'Ej: faltaban productos, el escáner no leyó bien, etc.';
+    area.style.cssText = 'width: 100%; min-height: 110px; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #111; color: #fff; font-family: inherit; font-size: 0.95rem; resize: vertical; outline: none; box-sizing: border-box;';
+
+    const fila = document.createElement('div');
+    fila.style.cssText = 'display: flex; gap: 10px; margin-top: 16px;';
+
+    const omitir = document.createElement('button');
+    omitir.type = 'button';
+    omitir.textContent = 'Ahora no';
+    omitir.style.cssText = 'flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: transparent; color: #ccc; font-weight: 600; cursor: pointer;';
+
+    const enviar = document.createElement('button');
+    enviar.type = 'button';
+    enviar.textContent = 'Enviar';
+    enviar.style.cssText = 'flex: 1; padding: 12px; border-radius: 10px; border: none; background: #27ae60; color: #fff; font-weight: 700; cursor: pointer;';
+
+    const estado = document.createElement('p');
+    estado.style.cssText = 'margin: 10px 0 0 0; font-size: 0.8rem; color: #f39c12; min-height: 1em;';
+
+    const cerrar = () => overlay.remove();
+    omitir.addEventListener('click', cerrar);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cerrar(); });
+
+    enviar.addEventListener('click', async () => {
+        const mensaje = area.value.trim();
+        if (!mensaje) {
+            estado.textContent = 'Escribí algo o tocá «Ahora no».';
+            area.focus();
+            return;
+        }
+
+        enviar.disabled = true;
+        omitir.disabled = true;
+        enviar.textContent = 'Enviando...';
+
+        try {
+            const res = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pasillo: pasillo || '', mensaje })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'No se pudo enviar');
+
+            estado.style.color = '#27ae60';
+            estado.textContent = '¡Gracias! Comentario enviado.';
+            setTimeout(cerrar, 900);
+        } catch (e) {
+            estado.style.color = '#e74c3c';
+            estado.textContent = e.message;
+            enviar.disabled = false;
+            omitir.disabled = false;
+            enviar.textContent = 'Enviar';
+        }
+    });
+
+    fila.appendChild(omitir);
+    fila.appendChild(enviar);
+    card.appendChild(titulo);
+    card.appendChild(sub);
+    card.appendChild(area);
+    card.appendChild(fila);
+    card.appendChild(estado);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    area.focus();
+};
+
 // Autocompletar el evento del botón si existe
 document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('downloadBtn');

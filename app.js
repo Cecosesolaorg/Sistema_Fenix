@@ -87,6 +87,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Restrict view-usuarios for 'coordinador'
             const navUsuarios = document.querySelector('.nav-item[data-target="view-usuarios"]');
             if (navUsuarios) navUsuarios.style.display = 'none';
+            const navComentarios = document.querySelector('.nav-item[data-target="view-comentarios"]');
+            if (navComentarios) navComentarios.style.display = 'none';
         }
     }
 

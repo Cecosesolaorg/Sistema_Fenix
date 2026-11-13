@@ -47,6 +47,10 @@
                     <i class="fa-solid fa-users"></i>
                     <span>Usuarios</span>
                 </a>
+                <a href="#" class="nav-item" data-target="view-comentarios">
+                    <i class="fa-solid fa-comment-dots"></i>
+                    <span>Comentarios</span>
+                </a>
             </nav>
         </aside>
 
@@ -286,6 +290,48 @@
                         </div>
                     </div>
 
+                    <!-- Preferencias de inventario -->
+                    <div class="glass" style="margin-bottom: 24px; padding: 22px 24px; border-radius: 14px;">
+                        <h3 style="margin: 0 0 4px 0; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-sliders" style="color: #673ab7;"></i> Preferencias de inventario
+                        </h3>
+                        <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
+                            Se aplican en los teléfonos de todos los trabajadores.
+                        </p>
+
+                        <div style="display: flex; flex-direction: column; gap: 18px; margin-top: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                <div>
+                                    <p style="margin: 0; font-weight: 700;">Modo de la calculadora</p>
+                                    <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.82rem;">
+                                        Cómo se cuenta al tocar un producto.
+                                    </p>
+                                </div>
+                                <select id="set-inventory-mode"
+                                    style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.05); color: var(--text-color); font-weight: 600; outline: none; cursor: pointer;">
+                                    <option value="calculator">Calculadora</option>
+                                    <option value="quick_notes">Notas rápidas</option>
+                                </select>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                <div>
+                                    <p style="margin: 0; font-weight: 700;">Pedir opinión al exportar el Excel</p>
+                                    <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.82rem;">
+                                        Muestra un formulario corto al trabajador después de descargar el reporte.
+                                    </p>
+                                </div>
+                                <label style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; user-select: none;">
+                                    <input type="checkbox" id="set-enable-feedback"
+                                        style="width: 18px; height: 18px; accent-color: #673ab7; cursor: pointer;">
+                                    <span id="set-enable-feedback-label">Desactivado</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <p id="set-status" style="margin: 14px 0 0 0; color: var(--text-muted); font-size: 0.8rem; min-height: 1em;"></p>
+                    </div>
+
                     <div class="page-header"
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <h3 style="margin-bottom: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
@@ -350,6 +396,31 @@
                         </div>
                         <p id="users-count" style="padding: 12px 16px; font-size: 0.85rem; color: var(--text-muted);">
                         </p>
+                    </div>
+                </div>
+
+                <div id="view-comentarios" class="dashboard-content view-section" style="display: none;">
+                    <div class="page-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
+                        <h3 style="margin-bottom: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-comment-dots" style="color: #673ab7;"></i> Comentarios de los
+                            trabajadores
+                        </h3>
+                        <button onclick="cargarComentarios()"
+                            style="background: linear-gradient(135deg, #673ab7, #9575cd); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(103,58,183,0.25);">
+                            <i class="fa-solid fa-rotate"></i> Actualizar
+                        </button>
+                    </div>
+
+                    <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 0.88rem;">
+                        Lo que escriben los trabajadores al exportar un inventario. Solo aparece si la opción
+                        «Pedir opinión al exportar el Excel» está activada.
+                    </p>
+
+                    <div id="comentarios-lista" class="glass"
+                        style="padding: 6px 18px; border-radius: 14px; min-height: 120px;">
+                        <p style="color: var(--text-muted); padding: 20px 0; text-align: center;">Cargando
+                            comentarios...</p>
                     </div>
                 </div>
 
@@ -488,8 +559,8 @@
     <script src="src/seguridad.js?v=1"></script>
     <script src="src/products.js?v=2"></script>
     <!-- Custom JS -->
-    <script src="app.js?v=2.5"></script>
-    <script src="sistema.js?v=2.7"></script>
+    <script src="app.js?v=2.6"></script>
+    <script src="sistema.js?v=2.8"></script>
 </body>
 
 </html>
