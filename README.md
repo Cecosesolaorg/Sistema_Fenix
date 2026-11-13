@@ -30,6 +30,24 @@ En Windows hay dos accesos directos:
 | `iniciar_servidor.bat` | levanta el servidor en la red local |
 | `iniciar_con_internet.bat` | levanta el servidor y abre un túnel SSH con Serveo |
 
+Ambos scripts buscan Node.js automáticamente, en este orden:
+
+1. `tools\node_portable\node.exe`
+2. `node_portable\node.exe`
+3. `node.exe` junto al `.bat`
+4. cualquier `node.exe` dentro de `tools`
+5. `node` en el `PATH` de Windows
+
+Si no encuentran ninguno, muestran un error claro con las rutas revisadas.
+
+> `tools/node_portable/` **no está en el repositorio**: contiene binarios y está en
+> `.gitignore`. Al copiar el proyecto a otra PC hay que copiar esa carpeta o
+> instalar Node.js LTS desde <https://nodejs.org>.
+
+Si los teléfonos no pueden conectarse, permití Node.js en el Firewall de Windows
+para redes privadas (Windows lo pregunta la primera vez). El puerto se puede
+cambiar con `set PORT=8443` antes de ejecutar el `.bat`.
+
 > El túnel publica la aplicación en Internet **sin autenticación**. No usarlo en
 > producción.
 
