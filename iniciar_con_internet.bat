@@ -14,33 +14,50 @@ echo     INICIANDO SERVIDOR FENIX + INTERNET
 echo  =========================================
 echo.
 
-:: -- Buscar Node.js ---------------------------------------------------------
-set "NODE_EXE="
-if exist "%~dp0tools\node_portable\node.exe" set "NODE_EXE=%~dp0tools\node_portable\node.exe"
-if not defined NODE_EXE if exist "%~dp0node_portable\node.exe" set "NODE_EXE=%~dp0node_portable\node.exe"
-if not defined NODE_EXE if exist "%~dp0node.exe" set "NODE_EXE=%~dp0node.exe"
-if not defined NODE_EXE (
-    for /r "%~dp0tools" %%f in (node.exe) do if not defined NODE_EXE set "NODE_EXE=%%f"
-)
-if not defined NODE_EXE (
-    for /f "delims=" %%n in ('where node 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%n"
-)
+:: -- 1. Buscar Node.js ------------------------------------------------------
+call :detectar_node
+if defined NODE_EXE goto :tengo_node
 
-if not defined NODE_EXE (
-    color 0C
-    echo  ERROR: no se encontro Node.js.
+echo  No se encontro Node.js en esta PC.
+echo.
+echo  Se puede descargar la version portable oficial
+echo  LTS y dejarla dentro de esta carpeta, sin
+echo  permisos de administrador y sin tocar Windows.
+echo.
+if exist "%~dp0tools\node_portable.zip" (
+    echo  Tambien se puede usar el ZIP local que este
+    echo  en tools\node_portable.zip.
     echo.
-    echo  Copia tools\node_portable con node.exe junto a este .bat
-    echo  o instala Node.js LTS desde https://nodejs.org
-    echo.
-    pause
-    exit /b 1
 )
+choice /C SN /N /M "  Descargar e instalar Node.js ahora? [S/N] "
+if errorlevel 255 exit /b 1
+if errorlevel 2 goto :sin_node
 
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\instalar-node.ps1"
+if errorlevel 1 goto :sin_node
+call :detectar_node
+if defined NODE_EXE goto :tengo_node
+
+:sin_node
+color 0C
+echo.
+echo  No se pudo instalar Node.js automaticamente.
+echo.
+echo  Opciones manuales:
+echo    1. Copiar la carpeta tools\node_portable, con
+echo       node.exe, desde una PC donde ya funcione.
+echo    2. Descargar Node.js LTS desde https://nodejs.org
+echo       y volver a ejecutar este .bat.
+echo.
+pause
+exit /b 1
+
+:tengo_node
 echo  Node detectado: %NODE_EXE%
 echo.
 
-:: -- Verificar que exista el cliente SSH ------------------------------------
+:: -- 2. Verificar cliente SSH -----------------------------------------------
 where ssh >nul 2>&1
 if errorlevel 1 (
     color 0C
@@ -53,18 +70,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: -- Cerrar una instancia anterior en el mismo puerto -----------------------
+:: -- 3. Cerrar una instancia anterior en el mismo puerto --------------------
 echo  [1/3] Cerrando servidores anteriores...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction Stop | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { }" >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-:: -- Iniciar el servidor ----------------------------------------------------
+:: -- 4. Iniciar el servidor -------------------------------------------------
 echo  [2/3] Iniciando servidor local...
 start "Servidor Fenix Node" /min /d "%~dp0" cmd /k ""%NODE_EXE%" server.js"
 
 echo  Esperando que el servidor encienda...
 set "LISTO="
-for /l %%i in (1,1,10) do (
+for /l %%i in (1,1,15) do (
     if not defined LISTO (
         powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%PORT%/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
         if not errorlevel 1 set "LISTO=1"
@@ -99,3 +116,18 @@ echo.
 echo  El tunel se cerro.
 pause
 endlocal
+exit /b 0
+
+:: -- Subrutina: buscar Node.js ----------------------------------------------
+:detectar_node
+set "NODE_EXE="
+if exist "%~dp0tools\node_portable\node.exe" set "NODE_EXE=%~dp0tools\node_portable\node.exe"
+if not defined NODE_EXE if exist "%~dp0node_portable\node.exe" set "NODE_EXE=%~dp0node_portable\node.exe"
+if not defined NODE_EXE if exist "%~dp0node.exe" set "NODE_EXE=%~dp0node.exe"
+if not defined NODE_EXE (
+    for /r "%~dp0tools" %%f in (node.exe) do if not defined NODE_EXE set "NODE_EXE=%%f"
+)
+if not defined NODE_EXE (
+    for /f "delims=" %%n in ('where node 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%n"
+)
+goto :eof

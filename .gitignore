@@ -24,6 +24,7 @@ certificados/
 # Node portable y binarios
 tools/*
 !tools/generar-certificado.sh
+!tools/instalar-node.ps1
 node_modules/
 *.exe
 

@@ -48,6 +48,19 @@ Si los teléfonos no pueden conectarse, permití Node.js en el Firewall de Windo
 para redes privadas (Windows lo pregunta la primera vez). El puerto se puede
 cambiar con `set PORT=8443` antes de ejecutar el `.bat`.
 
+### Primer arranque sin Node.js
+
+Si la PC no tiene Node, el `.bat` ofrece instalarlo automáticamente:
+
+1. Si existe `tools\node_portable.zip`, lo extrae (sirve sin Internet).
+2. Si no, descarga la última versión **LTS** desde `nodejs.org`.
+3. Verifica el **SHA-256** contra `SHASUMS256.txt` antes de usarla.
+4. Extrae en `tools\node_portable` y continúa.
+
+No pide administrador ni modifica Windows: es un Node portable dentro del
+proyecto. Para instalaciones sin Internet, llevá el ZIP oficial en `tools\`
+(opcionalmente con su archivo `.sha256` al lado para verificar la integridad).
+
 > El túnel publica la aplicación en Internet **sin autenticación**. No usarlo en
 > producción.
 
