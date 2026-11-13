@@ -25,6 +25,7 @@ certificados/
 tools/*
 !tools/generar-certificado.sh
 !tools/instalar-node.ps1
+!tools/crear-admin.js
 node_modules/
 *.exe
 

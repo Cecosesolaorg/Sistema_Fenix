@@ -105,7 +105,7 @@ app.js             Lógica del panel
 styles.css         Estilos
 src/               Estado, productos, sesión, exportación a Excel
 src/vendor/        Font Awesome, Inter, Chart.js, ExcelJS y FileSaver locales
-tools/             Utilidades (generación de certificados HTTPS)
+tools/             Utilidades (certificados HTTPS, Node portable, crear admin)
 certificados/      CA y certificado TLS (datos locales, fuera de git)
 registros/         Usuarios y avatares (datos locales, fuera de git)
 inventarios base de datos/   Reportes generados (datos locales, fuera de git)
@@ -116,6 +116,42 @@ inventarios base de datos/   Reportes generados (datos locales, fuera de git)
 `registros/`, `inventarios base de datos/` y `reportes_enviados/` contienen datos
 personales y credenciales. Están en `.gitignore` y **no deben subirse al
 repositorio**.
+
+### Usuarios y primer administrador
+
+Los usuarios **no están en el código**: cada cuenta es un `.json` dentro de
+`registros/`. Por eso, al copiar el proyecto desde GitHub o un ZIP, la carpeta
+`registros/` llega vacía y no hay cuentas para iniciar sesión.
+
+Opciones para resolverlo:
+
+1. **Copiar los usuarios existentes**: pasar los `.json` de usuarios de la PC
+   anterior a `registros/` en la PC nueva. Las contraseñas siguen funcionando
+   porque el hash scrypt viaja dentro del archivo.
+2. **Crear un administrador nuevo**:
+
+   ```bat
+   crear-admin.bat
+   ```
+
+   o desde la terminal:
+
+   ```bat
+   node tools\crear-admin.js
+   node tools\crear-admin.js --cedula 12345678 --nombre "Ana Perez" --clave "Secreta1"
+   ```
+
+3. **Ver qué usuarios hay** en una instalación:
+
+   ```bat
+   node tools\crear-admin.js --listar
+   ```
+
+El registro público de `index.html` crea siempre usuarios con rol `user`; los
+roles se cambian desde el panel con una cuenta `admin`. `crear-admin.js` escribe
+el archivo con permisos `600` y, si la cédula ya existe, actualiza la clave y el
+rol sin duplicar la cuenta. No hace falta reiniciar el servidor: cada login lee
+la carpeta `registros/` de nuevo.
 
 ## Seguridad
 

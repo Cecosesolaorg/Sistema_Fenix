@@ -188,6 +188,10 @@ certificados.
 - `donde-esta-node.bat`: diagnóstico de Node, PowerShell, `pwsh`, SSH y la IP
   local del servidor.
 - Los `.bat` son ASCII puro con finales de línea CRLF, sin `choice`.
+- `tools/crear-admin.js` y `crear-admin.bat`: crean o actualizan un
+  administrador en `registros/` y permiten listar los usuarios existentes. Las
+  cuentas no están en el repositorio, así que una copia nueva llega sin
+  usuarios.
 
 **Cómo mejora**
 
