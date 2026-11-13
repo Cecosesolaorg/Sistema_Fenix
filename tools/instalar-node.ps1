@@ -55,7 +55,7 @@ try {
         Info "  Usando ZIP local: $zip"
         $hashLocal = "$zip.sha256"
         if (Test-Path $hashLocal) {
-            $esperado = (Get-Content $hashLocal -TotalCount 1).Trim().Split(' ')[0].ToLower()
+            $esperado = ((Get-Content $hashLocal -TotalCount 1).Trim() -split '\s+')[0].ToLower()
             $real = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
             if ($esperado -ne $real) {
                 Falla 'El SHA-256 del ZIP local no coincide con el archivo .sha256.'

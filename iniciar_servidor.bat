@@ -129,7 +129,7 @@ set "NODE_EXE="
 if exist "%~dp0tools\node_portable\node.exe" set "NODE_EXE=%~dp0tools\node_portable\node.exe"
 if not defined NODE_EXE if exist "%~dp0node_portable\node.exe" set "NODE_EXE=%~dp0node_portable\node.exe"
 if not defined NODE_EXE if exist "%~dp0node.exe" set "NODE_EXE=%~dp0node.exe"
-if not defined NODE_EXE (
+if not defined NODE_EXE if exist "%~dp0tools" (
     for /r "%~dp0tools" %%f in (node.exe) do if not defined NODE_EXE set "NODE_EXE=%%f"
 )
 if not defined NODE_EXE (
