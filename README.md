@@ -27,8 +27,8 @@ En Windows hay dos accesos directos:
 
 | Archivo | Qué hace |
 |---|---|
-| `iniciar_servidor.bat` | levanta el servidor en la red local |
-| `iniciar_con_internet.bat` | levanta el servidor y abre un túnel SSH con Serveo |
+| `iniciar_servidor.bat` | levanta el servidor en la red local, en la misma ventana |
+| `iniciar_con_internet.bat` | levanta el servidor minimizado y abre el túnel SSH en la ventana principal |
 | `donde-esta-node.bat` | diagnóstico: muestra qué Node se detecta y desde dónde |
 
 Ambos scripts buscan Node.js automáticamente, en este orden:
@@ -39,7 +39,8 @@ Ambos scripts buscan Node.js automáticamente, en este orden:
 4. cualquier `node.exe` dentro de `tools`
 5. `node` en el `PATH` de Windows
 
-Si no encuentran ninguno, muestran un error claro con las rutas revisadas.
+Si no encuentran ninguno, ofrecen instalar Node portable automáticamente
+(ver más abajo).
 
 > `tools/node_portable/` **no está en el repositorio**: contiene binarios y está en
 > `.gitignore`. Al copiar el proyecto a otra PC hay que copiar esa carpeta o

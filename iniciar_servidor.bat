@@ -1,13 +1,14 @@
 @echo off
 setlocal EnableExtensions
-title Servidor Inventario Fenix
+title Servidor Fenix
 color 0A
 cls
 
-:: Trabajar siempre en la carpeta de este .bat, sin importar desde donde se abra
+:: Trabajar siempre en la carpeta de este .bat
 cd /d "%~dp0"
-
 if not defined PORT set "PORT=8000"
+set "INTENTO=0"
+call :detectar_ps
 
 echo.
 echo  =========================================
@@ -17,8 +18,9 @@ echo.
 
 :: -- 1. Buscar Node.js ------------------------------------------------------
 call :detectar_node
-if defined NODE_EXE goto :tengo_node
+if defined NODE_EXE goto :validar_node
 
+:preguntar_instalacion
 echo  No se encontro Node.js en esta PC.
 echo.
 echo  Se puede descargar la version portable oficial
@@ -39,13 +41,6 @@ if /i not "%RESPUESTA%"=="S" (
     goto :sin_node
 )
 
-set "PS_EXE="
-where powershell >nul 2>&1
-if not errorlevel 1 set "PS_EXE=powershell"
-if not defined PS_EXE (
-    where pwsh >nul 2>&1
-    if not errorlevel 1 set "PS_EXE=pwsh"
-)
 if not defined PS_EXE (
     color 0C
     echo.
@@ -71,61 +66,38 @@ echo.
 "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\instalar-node.ps1"
 if errorlevel 1 goto :sin_node
 call :detectar_node
-if defined NODE_EXE goto :tengo_node
+if defined NODE_EXE goto :validar_node
+goto :sin_node
 
-:sin_node
-color 0C
-echo.
-echo  No se pudo instalar Node.js automaticamente.
-echo.
-echo  Opciones manuales:
-echo    1. Copiar la carpeta tools\node_portable, con
-echo       node.exe, desde una PC donde ya funcione.
-echo    2. Descargar Node.js LTS desde https://nodejs.org
-echo       y volver a ejecutar este .bat.
-echo.
-pause
-exit /b 1
+:: -- 2. Validar que el node.exe detectado funcione --------------------------
+:validar_node
+if not exist "%NODE_EXE%" goto :node_invalido
+"%NODE_EXE%" -v >nul 2>&1
+if errorlevel 1 goto :node_invalido
+goto :tengo_node
 
+:node_invalido
+if "%INTENTO%"=="1" goto :sin_node
+set "INTENTO=1"
+color 0E
+echo.
+echo  El node.exe detectado no funciona:
+echo     %NODE_EXE%
+echo.
+echo  Se puede instalar una version portable nueva.
+set "NODE_EXE="
+goto :preguntar_instalacion
+
+:: -- 3. Mostrar datos y arrancar --------------------------------------------
 :tengo_node
 echo  Node: %NODE_EXE%
+echo  Comando: "%NODE_EXE%" server.js
 echo.
 
-:: -- 2. Cerrar una instancia anterior en el mismo puerto --------------------
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction Stop | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { }" >nul 2>&1
-timeout /t 1 /nobreak >nul
-
-:: -- 3. Iniciar el servidor en su propia ventana ----------------------------
-start "Servidor Node" /d "%~dp0" "%NODE_EXE%" server.js
-
-:: -- 4. Esperar y verificar que responda ------------------------------------
-echo  Esperando al servidor...
-set "LISTO="
-for /l %%i in (1,1,15) do (
-    if not defined LISTO (
-        powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%PORT%/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
-        if not errorlevel 1 set "LISTO=1"
-        if not defined LISTO timeout /t 1 /nobreak >nul
-    )
-)
-
-:: -- 5. Obtener IP de la red local ------------------------------------------
 set "LOCAL_IP="
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4" ^| findstr /v "127.0.0.1" ^| findstr /v "192.168.137"') do if not defined LOCAL_IP set "LOCAL_IP=%%a"
 set "LOCAL_IP=%LOCAL_IP: =%"
 
-echo.
-if defined LISTO (
-    echo  Servidor activo.
-) else (
-    color 0E
-    echo  ADVERTENCIA: el servidor aun no responde.
-    echo  Revisa la ventana "Servidor Node".
-    echo.
-    echo  Si esa ventana se cerro, ejecuta a mano:
-    echo     "%NODE_EXE%" server.js
-)
-echo.
 echo  Esta PC:
 echo     http://localhost:%PORT%
 echo.
@@ -138,26 +110,42 @@ if defined LOCAL_IP (
 )
 echo.
 echo  =========================================
-echo   COMO CONECTAR EL TELEFONO:
+echo   El servidor queda corriendo en ESTA ventana.
+echo   Para detenerlo: Ctrl+C o cerrar la ventana.
 echo.
-echo   1. El telefono debe estar en el MISMO
-echo      WiFi que esta PC.
-echo.
-echo   2. Abre en el telefono la direccion de
-echo      arriba.
-echo.
-echo   3. Si no carga, permite Node.js en el
-echo      Firewall de Windows para redes
-echo      privadas.
-echo.
+echo   Si el navegador no abre solo, entra a:
+echo     http://localhost:%PORT%
 echo  =========================================
 echo.
 
-if defined LISTO start "" "http://localhost:%PORT%/index.html"
+if defined PS_EXE (
+    start "" %PS_EXE% -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; Start-Process 'http://localhost:%PORT%/'"
+) else (
+    start "" "http://localhost:%PORT%/"
+)
 
+"%NODE_EXE%" server.js
+
+echo.
+echo  El servidor se detuvo con codigo %errorlevel%.
 pause
 endlocal
 exit /b 0
+
+:: -- Errores ----------------------------------------------------------------
+:sin_node
+color 0C
+echo.
+echo  No se pudo iniciar Node.js.
+echo.
+echo  Opciones manuales:
+echo    1. Copiar la carpeta tools\node_portable, con
+echo       node.exe, desde una PC donde ya funcione.
+echo    2. Descargar Node.js LTS desde https://nodejs.org
+echo       y volver a ejecutar este .bat.
+echo.
+pause
+exit /b 1
 
 :: -- Subrutina: buscar Node.js ----------------------------------------------
 :detectar_node
@@ -170,5 +158,16 @@ if not defined NODE_EXE if exist "%~dp0tools" (
 )
 if not defined NODE_EXE (
     for /f "delims=" %%n in ('where node 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%n"
+)
+goto :eof
+
+:: -- Subrutina: detectar PowerShell ------------------------------------------
+:detectar_ps
+set "PS_EXE="
+where powershell >nul 2>&1
+if not errorlevel 1 set "PS_EXE=powershell"
+if not defined PS_EXE (
+    where pwsh >nul 2>&1
+    if not errorlevel 1 set "PS_EXE=pwsh"
 )
 goto :eof

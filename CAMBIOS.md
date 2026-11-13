@@ -168,6 +168,32 @@ Una expresión manipulada ya no puede ejecutar JavaScript. La aplicación funcio
 sin Internet y sin depender de terceros, y el tráfico puede cifrarse sin comprar
 certificados.
 
+### 7. Arranque en Windows (`7ba7d86` y siguientes)
+
+**Qué se cambió**
+
+- Los `.bat` trabajan siempre en su propia carpeta (`cd /d "%~dp0"`).
+- Búsqueda de Node en cascada: `tools\node_portable`, `node_portable`, la raíz,
+  cualquier `node.exe` dentro de `tools` y, por último, el `PATH`.
+- Antes de arrancar se valida el binario con `node.exe -v`; si no responde, se
+  ofrece instalar uno nuevo.
+- Instalación automática: `tools\instalar-node.ps1` usa un ZIP local si existe o
+  descarga la LTS oficial, verifica SHA-256 y extrae sin permisos de
+  administrador.
+- Se eliminó `start ... cmd /k ""node.exe" server.js"`: las comillas anidadas
+  hacían que `cmd` buscara un archivo llamado literalmente `"...\node.exe"`.
+- `iniciar_servidor.bat` corre Node en la misma ventana y abre el navegador con
+  retardo; `iniciar_con_internet.bat` lo corre minimizado y deja el túnel SSH en
+  la ventana principal.
+- `donde-esta-node.bat`: diagnóstico de Node, PowerShell, `pwsh`, SSH y la IP
+  local del servidor.
+- Los `.bat` son ASCII puro con finales de línea CRLF, sin `choice`.
+
+**Cómo mejora**
+
+El primer arranque funciona en una PC sin Node y sin permisos de administrador,
+y los errores de comillas y de comandos inexistentes dejan de aparecer.
+
 ---
 
 ## Hallazgos corregidos
