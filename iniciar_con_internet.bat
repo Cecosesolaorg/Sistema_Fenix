@@ -110,7 +110,7 @@ timeout /t 1 /nobreak >nul
 
 :: -- 4. Iniciar el servidor -------------------------------------------------
 echo  [2/3] Iniciando servidor local...
-start "Servidor Fenix Node" /min /d "%~dp0" cmd /k ""%NODE_EXE%" server.js"
+start "Servidor Fenix Node" /min /d "%~dp0" "%NODE_EXE%" server.js
 
 echo  Esperando que el servidor encienda...
 set "LISTO="
@@ -129,6 +129,9 @@ if defined LISTO (
     color 0E
     echo  ADVERTENCIA: el servidor puede no estar listo aun.
     echo  Revisa la ventana "Servidor Fenix Node".
+    echo.
+    echo  Si esa ventana se cerro, ejecuta a mano:
+    echo     "%NODE_EXE%" server.js
 )
 
 echo.

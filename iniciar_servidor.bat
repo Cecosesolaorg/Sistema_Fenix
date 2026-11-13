@@ -96,7 +96,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnecti
 timeout /t 1 /nobreak >nul
 
 :: -- 3. Iniciar el servidor en su propia ventana ----------------------------
-start "Servidor Node" /d "%~dp0" cmd /k ""%NODE_EXE%" server.js"
+start "Servidor Node" /d "%~dp0" "%NODE_EXE%" server.js
 
 :: -- 4. Esperar y verificar que responda ------------------------------------
 echo  Esperando al servidor...
@@ -120,7 +120,10 @@ if defined LISTO (
 ) else (
     color 0E
     echo  ADVERTENCIA: el servidor aun no responde.
-    echo  Revisa la ventana "Servidor Node" para ver el error.
+    echo  Revisa la ventana "Servidor Node".
+    echo.
+    echo  Si esa ventana se cerro, ejecuta a mano:
+    echo     "%NODE_EXE%" server.js
 )
 echo.
 echo  Esta PC:
