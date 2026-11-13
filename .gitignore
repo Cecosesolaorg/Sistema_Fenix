@@ -5,6 +5,9 @@ inventarios base de datos/
 reportes_enviados/
 avatars/
 
+# Certificados TLS locales — nunca versionar
+certificados/
+
 # JSON de datos generados en runtime
 *.json
 !package.json
@@ -19,7 +22,8 @@ avatars/
 *.csv
 
 # Node portable y binarios
-tools/
+tools/*
+!tools/generar-certificado.sh
 node_modules/
 *.exe
 

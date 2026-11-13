@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -7,7 +8,12 @@ const auth = require('./src/auth');
 // Que todo archivo/carpeta nuevo nazca privado: 600 para archivos, 700 para carpetas.
 try { process.umask(0o077); } catch (e) { }
 
-const PORT = 8000;   // HTTP  (fallback)
+// HTTPS opcional: FENIX_HTTPS=1 y los certificados en certificados/.
+const TLS_DIR = path.join(__dirname, 'certificados');
+const TLS_KEY = path.join(TLS_DIR, 'fenix-key.pem');
+const TLS_CERT = path.join(TLS_DIR, 'fenix-cert.pem');
+const TLS_ENABLED = process.env.FENIX_HTTPS === '1';
+const PORT = Number(process.env.PORT) || (TLS_ENABLED ? 8443 : 8000);
 const DIRECTORY = path.join(__dirname, 'registros');
 const REPORTES_DIR = path.join(__dirname, 'inventarios base de datos');
 const AVATARS_DIR = path.join(DIRECTORY, 'avatars');
@@ -69,6 +75,8 @@ const getContentType = (filePath) => {
         case '.ico': return 'image/x-icon';
         case '.woff': return 'font/woff';
         case '.woff2': return 'font/woff2';
+        case '.ttf': return 'font/ttf';
+        case '.otf': return 'font/otf';
         default: return 'application/octet-stream';
     }
 };
@@ -83,7 +91,7 @@ const PRIVATE_DIRS = new Set(['registros', 'inventarios base de datos', 'reporte
 // Solo se entregan estas extensiones. Nada de .json (los datos viven en registros/).
 const STATIC_EXTENSIONS = new Set([
     '.html', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif',
-    '.svg', '.webp', '.ico', '.woff', '.woff2'
+    '.svg', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.otf'
 ]);
 
 // Archivos del proyecto que no deben descargarse aunque su extensión esté permitida.
@@ -529,13 +537,16 @@ const requestHandler = (req, res) => {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-XSS-Protection', '0');
-    // El panel usa manejadores inline, así que 'unsafe-inline' sigue siendo
-    // necesario; el resto de la política bloquea orígenes, objetos y frames.
+    if (TLS_ENABLED) {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    // Todo se sirve desde el propio servidor (sin CDNs). 'unsafe-inline' sigue
+    // siendo necesario por los estilos y manejadores inline del panel.
     res.setHeader('Content-Security-Policy',
         "default-src 'self'; " +
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com https://cdnjs.cloudflare.com; " +
-        "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "font-src 'self'; " +
         "img-src 'self' data:; " +
         "connect-src 'self'; " +
         "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
@@ -638,14 +649,14 @@ const requestHandler = (req, res) => {
             }
 
             const token = auth.createSession(user);
-            res.setHeader('Set-Cookie', auth.sessionCookie(token));
+            res.setHeader('Set-Cookie', auth.sessionCookie(token, TLS_ENABLED));
             sendJson(res, 200, { status: 'success', user: publicUser(user) });
         });
 
     } else if (req.method === 'POST' && req.url === '/api/logout') {
         const cookies = auth.parseCookies(req.headers.cookie);
         auth.destroySession(cookies[auth.COOKIE_NAME]);
-        res.setHeader('Set-Cookie', auth.clearSessionCookie());
+        res.setHeader('Set-Cookie', auth.clearSessionCookie(TLS_ENABLED));
         sendJson(res, 200, { status: 'success' });
 
     } else if (req.method === 'GET' && req.url === '/api/me') {
@@ -767,7 +778,7 @@ const requestHandler = (req, res) => {
                 // Cerrar las demás sesiones y renovar la de este dispositivo.
                 auth.destroySessionsForUser(session.cedula);
                 const token = auth.createSession(user);
-                res.setHeader('Set-Cookie', auth.sessionCookie(token));
+                res.setHeader('Set-Cookie', auth.sessionCookie(token, TLS_ENABLED));
                 sendJson(res, 200, { status: 'success', message: 'Contraseña actualizada' });
             } catch (e) {
                 sendJson(res, 500, { status: 'error', message: e.message });
@@ -906,7 +917,7 @@ const requestHandler = (req, res) => {
 
                 // Auto-login tras registrarse.
                 const token = auth.createSession(record);
-                res.setHeader('Set-Cookie', auth.sessionCookie(token));
+                res.setHeader('Set-Cookie', auth.sessionCookie(token, TLS_ENABLED));
                 sendJson(res, 200, {
                     status: 'success',
                     message: 'Registrado correctamente',
@@ -1014,7 +1025,11 @@ const requestHandler = (req, res) => {
                 if (localIp !== '127.0.0.1') break;
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ip: localIp, port: PORT }));
+            res.end(JSON.stringify({
+                ip: localIp,
+                port: PORT,
+                protocol: TLS_ENABLED ? 'https' : 'http'
+            }));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'error', message: e.message }));
@@ -1370,13 +1385,15 @@ const requestHandler = (req, res) => {
                     if (fs.existsSync(historialPath)) {
                         historial = JSON.parse(fs.readFileSync(historialPath, 'utf8'));
                     }
+                    if (!Array.isArray(historial)) historial = [];
                     const evento = {
-                        usuario: (data.responsable || 'Responsable').replace(/_/g, ' ').toUpperCase(),
-                        accion: `Envío reporte ${data.aisleName || 'Pasillo'}`,
+                        usuario: (session && session.nombre) || 'Desconocido',
+                        accion: `Envío reporte ${cleanSingleLine(data.aisleName, 80) || 'Pasillo'}`,
                         fecha: new Date().toISOString()
                     };
                     historial.unshift(evento);
-                    fs.writeFileSync(historialPath, JSON.stringify(historial, null, 4), 'utf8');
+                    if (historial.length > 5000) historial = historial.slice(0, 5000);
+                    fs.writeFileSync(historialPath, JSON.stringify(historial, null, 4), { encoding: 'utf8', mode: 0o600 });
                 } catch (e) {
                     console.error("Error registrando en historial:", e);
                 }
@@ -1677,26 +1694,46 @@ try {
 securePermissions();
 
 // ── Servidores ──────────────────────────────────────────────────────────────
-const httpServer = http.createServer(requestHandler);
-httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`========================================================`);
-    console.log(`  🚀  Servidor HTTP Iniciado`);
-    console.log(`========================================================`);
-    console.log(`  En esta PC (Local):`);
-    console.log(`     http://localhost:${PORT}`);
+function startServer() {
+    const scheme = TLS_ENABLED ? 'https' : 'http';
+    let server;
 
-    console.log(`\n  En la RED Local (Teléfonos/Tablets):`);
-    const interfaces = os.networkInterfaces();
-    for (let devName in interfaces) {
-        let iface = interfaces[devName];
-        for (let i = 0; i < iface.length; i++) {
-            let alias = iface[i];
-            if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
-                console.log(`     http://${alias.address}:${PORT}`);
+    if (TLS_ENABLED) {
+        if (!fs.existsSync(TLS_KEY) || !fs.existsSync(TLS_CERT)) {
+            console.error(`\n  ❌ FENIX_HTTPS=1 pero faltan los certificados en: ${TLS_DIR}`);
+            console.error('     Generá uno con: bash tools/generar-certificado.sh\n');
+            process.exit(1);
+        }
+        server = https.createServer({
+            key: fs.readFileSync(TLS_KEY),
+            cert: fs.readFileSync(TLS_CERT)
+        }, requestHandler);
+    } else {
+        server = http.createServer(requestHandler);
+    }
+
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`========================================================`);
+        console.log(`  🚀  Servidor ${TLS_ENABLED ? 'HTTPS' : 'HTTP'} Iniciado`);
+        console.log(`========================================================`);
+        console.log(`  En esta PC (Local):`);
+        console.log(`     ${scheme}://localhost:${PORT}`);
+
+        console.log(`\n  En la RED Local (Teléfonos/Tablets):`);
+        const interfaces = os.networkInterfaces();
+        for (let devName in interfaces) {
+            let iface = interfaces[devName];
+            for (let i = 0; i < iface.length; i++) {
+                let alias = iface[i];
+                if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+                    console.log(`     ${scheme}://${alias.address}:${PORT}`);
+                }
             }
         }
-    }
-    console.log(`========================================================`);
-    console.log(`  Registros en: ${DIRECTORY}`);
-    console.log(`========================================================`);
-});
+        console.log(`========================================================`);
+        console.log(`  Registros en: ${DIRECTORY}`);
+        console.log(`========================================================`);
+    });
+}
+
+startServer();

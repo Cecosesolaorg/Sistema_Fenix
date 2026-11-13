@@ -10,29 +10,22 @@ window.ExportApp = {
 
             console.log("📦 Cargando librerías locales...");
 
-            const LOCAL_EXCEL = "/src/exceljs.min.js";
-            const LOCAL_SAVER = "/src/FileSaver.min.js";
-            const CDN_EXCEL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
-            const CDN_SAVER = "https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js";
+            const LIB_EXCEL = "/src/vendor/exceljs.min.js";
+            const LIB_SAVER = "/src/vendor/FileSaver.min.js";
 
-            const loadScript = (localUrl, cdnUrl) => new Promise((res, rej) => {
+            // Todo se sirve desde el propio servidor: la red local puede estar
+            // sin Internet y no hay dependencias de terceros.
+            const loadScript = (url) => new Promise((res, rej) => {
                 const s = document.createElement('script');
-                s.src = localUrl;
-                s.onload = () => { console.log("✅ Cargado local:", localUrl); res(); };
-                s.onerror = () => {
-                    console.warn("⚠️ Local falló, intentando CDN:", cdnUrl);
-                    const s2 = document.createElement('script');
-                    s2.src = cdnUrl;
-                    s2.onload = () => { console.log("✅ Cargado CDN:", cdnUrl); res(); };
-                    s2.onerror = () => rej("Error cargando: " + cdnUrl);
-                    document.head.appendChild(s2);
-                };
+                s.src = url;
+                s.onload = () => { console.log("✅ Cargado:", url); res(); };
+                s.onerror = () => rej(new Error("No se pudo cargar " + url));
                 document.head.appendChild(s);
             });
 
             Promise.all([
-                loadScript(LOCAL_EXCEL, CDN_EXCEL),
-                loadScript(LOCAL_SAVER, CDN_SAVER)
+                loadScript(LIB_EXCEL),
+                loadScript(LIB_SAVER)
             ]).then(resolve).catch(reject);
         });
     },
@@ -275,15 +268,6 @@ window.ExportApp = {
                     } catch (err) { console.error("Error modal:", err); }
                 }
             }).catch(err => console.error("Error cargando settings feedback:", err));
-
-            // --- ENVIAR AL SERVIDOR PARA GUARDAR EL UNIFICADO ---
-            try {
-                fetch('/api/save-excel', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ aisleName: aisleTitle, responsable, companero, ayudante, products: productsToWrite, inventoryData })
-                }).catch(() => { });
-            } catch (e) { }
 
             // --- DESCARGA COMPLETADA ---
             console.log("✅ Descarga de Excel finalizada correctamente.");

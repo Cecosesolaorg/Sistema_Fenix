@@ -127,12 +127,15 @@ function parseCookies(header) {
     return out;
 }
 
-function sessionCookie(token) {
-    return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
+function sessionCookie(token, secure) {
+    // Secure solo bajo HTTPS: en HTTP el navegador descartaría la cookie.
+    const extra = secure ? '; Secure' : '';
+    return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${extra}`;
 }
 
-function clearSessionCookie() {
-    return `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+function clearSessionCookie(secure) {
+    const extra = secure ? '; Secure' : '';
+    return `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${extra}`;
 }
 
 module.exports = {

@@ -6,11 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fénix Inventario Cecosesola</title>
     <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="src/vendor/fonts/inter.css">
     <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="src/vendor/fontawesome/css/all.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -152,7 +150,7 @@
                             <p style="margin-top: 12px; color: var(--text-muted); font-weight: 600;">Cargando
                                 inventarios...</p>
                             <p style="margin-top: 6px; font-size: 0.8rem; color: var(--text-muted);">Asegúrate de abrir
-                                el sistema vía <strong>http://localhost:8000</strong> con el servidor activo</p>
+                                el sistema desde <strong id="reportes-origen">el servidor</strong> y verificá que esté activo</p>
                         </div>
                     </div>
 
@@ -548,11 +546,11 @@
     </div>
 
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="src/vendor/chart.umd.min.js"></script>
 
     <!-- Excel Export Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <script src="src/vendor/exceljs.min.js"></script>
+    <script src="src/vendor/FileSaver.min.js"></script>
     <script src="src/excel_export.js"></script>
 
     <!-- Productos Centralizados -->

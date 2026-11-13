@@ -437,7 +437,11 @@
                     .replace(/−/g, '-')
                     .replace(/,/g, '.');
 
-                let res = eval(expr);
+                const res = (typeof window.evaluarAritmetica === 'function')
+                    ? window.evaluarAritmetica(expr)
+                    : null;
+                if (res === null) throw new Error('Expresión inválida');
+
                 if (!isNaN(res)) {
                     let oldTotal = Number(this.tempTotal) || 0;
                     this.tempTotal = oldTotal + res;

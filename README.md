@@ -6,7 +6,9 @@ registro de responsables, cierre de pasillos y exportación de reportes a Excel.
 ## Requisitos
 
 - Node.js 18 o superior (funciona con Node portable de Windows).
-- No usa dependencias npm: solo módulos nativos (`http`, `fs`, `path`, `os`).
+- No usa dependencias npm: solo módulos nativos (`http`, `https`, `fs`, `path`, `os`).
+- `openssl` solo si querés servir por HTTPS (viene instalado en Linux; en Windows
+  se puede usar Git Bash).
 
 ## Cómo ejecutarlo
 
@@ -31,6 +33,34 @@ En Windows hay dos accesos directos:
 > El túnel publica la aplicación en Internet **sin autenticación**. No usarlo en
 > producción.
 
+### HTTPS opcional
+
+El servidor puede servir por HTTPS sin instalar nada extra:
+
+```bash
+bash tools/generar-certificado.sh   # crea la CA local y el certificado (una vez)
+FENIX_HTTPS=1 node server.js        # arranca en https://<IP>:8443
+```
+
+`PORT` permite cambiar el puerto (`PORT=443`). Los certificados quedan en
+`certificados/` (ignorada por git) con permisos `600`.
+
+Cada teléfono o PC debe confiar **una sola vez** en `certificados/fenix-ca.crt`:
+
+- **Android:** Ajustes → Seguridad → Cifrado y credenciales → Instalar
+  certificado → Certificado de CA.
+- **iPhone:** enviar el `.crt`, instalarlo en Ajustes → General → VPN y
+  dispositivo, y activar la confianza en Ajustes → General → Información →
+  Confianza en certificados.
+- **Windows/Linux:** importar el `.crt` como autoridad de confianza.
+
+El certificado incluye `localhost`, el nombre del equipo y las IP de la red
+local. Si cambia la IP, volvé a ejecutar `tools/generar-certificado.sh` (la CA se
+reutiliza, así que no hay que reinstalarla en los teléfonos).
+
+Bajo HTTPS la cookie de sesión se marca `Secure` y se envía
+`Strict-Transport-Security` (HSTS).
+
 ## Estructura
 
 ```text
@@ -41,6 +71,9 @@ sistema.html/js    Panel de administración
 app.js             Lógica del panel
 styles.css         Estilos
 src/               Estado, productos, sesión, exportación a Excel
+src/vendor/        Font Awesome, Inter, Chart.js, ExcelJS y FileSaver locales
+tools/             Utilidades (generación de certificados HTTPS)
+certificados/      CA y certificado TLS (datos locales, fuera de git)
 registros/         Usuarios y avatares (datos locales, fuera de git)
 inventarios base de datos/   Reportes generados (datos locales, fuera de git)
 ```
@@ -66,9 +99,11 @@ Estado actual del proyecto:
 | Migración de claves viejas | ✅ a hash al arrancar y al primer login |
 | Permisos de los datos | ✅ carpetas `700`, archivos `600` |
 | Cambio de contraseña | ✅ desde el perfil, con la clave actual |
-| Cifrado en tránsito | ❌ HTTP plano en la red local |
+| Cifrado en tránsito | ✅ HTTPS opcional con CA local (`FENIX_HTTPS=1`) |
 | Productos en código ejecutable | ✅ datos en JSON, nunca se evalúan (`SEC-04`) |
 | XSS en el panel | ✅ escape en cliente y validación en servidor (`SEC-09`) |
+| Evaluación de expresiones | ✅ evaluador propio, sin `eval` ni `new Function` (`SEC-11`) |
+| Recursos de terceros | ✅ Font Awesome, Inter, Chart.js, ExcelJS y FileSaver locales (`src/vendor/`) |
 
 ### Cómo funciona el acceso
 
@@ -100,12 +135,16 @@ Estado actual del proyecto:
   permisos `700` (carpetas) y `600` (archivos): solo el usuario que corre el
   servidor puede leerlos. Los archivos nuevos nacen con esos permisos.
 
-La política de seguridad de contenido (CSP) solo permite scripts y estilos
-propios y de los CDN usados (`cdn.jsdelivr.net`, `cdnjs.cloudflare.com`,
-`fonts.googleapis.com`, `fonts.gstatic.com`).
+Todos los recursos (tipografías, íconos y librerías de Excel y gráficos) se
+sirven desde el propio servidor en `src/vendor/`: la aplicación funciona sin
+Internet y no depende de CDNs. La política de seguridad de contenido (CSP) solo
+permite recursos propios (`'self'`).
 
-**No exponer la aplicación a Internet** mientras use HTTP plano. Para uso en red
-local, limitar el acceso a una VLAN o SSID de confianza.
+La calculadora y las sumas de reportes usan un evaluador aritmético propio
+(`window.evaluarAritmetica` en `src/seguridad.js`), sin `eval` ni `new Function`.
+
+**No exponer la aplicación a Internet por HTTP plano.** Para uso en red local,
+activá HTTPS o limitá el acceso a una VLAN o SSID de confianza.
 
 Ver `REVISION-SEGURIDAD.md` para el detalle y el plan de corrección.
 

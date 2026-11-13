@@ -607,7 +607,7 @@ window.cargarHistorial = async function () {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding: 40px;">
                     <i class="fa-solid fa-triangle-exclamation" style="font-size: 2.5rem; color: #f39c12;"></i>
                     <p style="margin-top: 12px; font-weight: 600; color: var(--text-muted);">No se pudo conectar con el servidor</p>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">Abre el sistema desde <strong>http://localhost:8000</strong> con el servidor activo</p>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">Abre el sistema desde <strong>${location.origin}</strong> con el servidor activo</p>
                 </td></tr>`;
         if (countEl) countEl.textContent = '';
     }
@@ -793,6 +793,8 @@ function generarFilaHistorial(evento, index) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const origenReportes = document.getElementById('reportes-origen');
+    if (origenReportes) origenReportes.textContent = location.origin;
     const reportesNavBtn = document.querySelector('[data-target="view-reportes"]');
     if (reportesNavBtn) {
         reportesNavBtn.addEventListener('click', () => {
@@ -1805,11 +1807,10 @@ function construirTablaDeposito(tableId, productos, depositKey, savedData) {
 
     // Helper for math evaluation
     const parseMath = (str) => {
-        try {
-            const clean = (str || '').toString().replace(/[^0-9+\-*/.]/g, '');
-            if (!clean) return 0;
-            return parseFloat(new Function('return ' + clean)()) || 0;
-        } catch { return 0; }
+        const valor = (typeof window.evaluarAritmetica === 'function')
+            ? window.evaluarAritmetica(str)
+            : null;
+        return valor === null ? 0 : valor;
     };
 
     // Validar para que resuelva la suma/resta
@@ -1893,11 +1894,10 @@ function construirTablaDeposito(tableId, productos, depositKey, savedData) {
 
 function _calcFila(tr) {
     const parseMath = (str) => {
-        try {
-            const clean = (str || '').toString().replace(/[^0-9+\-*/.]/g, '');
-            if (!clean) return 0;
-            return parseFloat(new Function('return ' + clean)()) || 0;
-        } catch { return 0; }
+        const valor = (typeof window.evaluarAritmetica === 'function')
+            ? window.evaluarAritmetica(str)
+            : null;
+        return valor === null ? 0 : valor;
     };
     const inicial = parseMath(tr.querySelector('[data-field="inicial"]').value);
     const recargo = parseMath(tr.querySelector('[data-field="recargo"]').value);
@@ -1960,11 +1960,10 @@ function recalcularFila(tr) {
 
 function actualizarTotalesTabla(tbody) {
     const parseMath = (str) => {
-        try {
-            const clean = (str || '').toString().replace(/[^0-9+\-*/.]/g, '');
-            if (!clean) return 0;
-            return parseFloat(new Function('return ' + clean)()) || 0;
-        } catch { return 0; }
+        const valor = (typeof window.evaluarAritmetica === 'function')
+            ? window.evaluarAritmetica(str)
+            : null;
+        return valor === null ? 0 : valor;
     };
     let sumIni = 0, sumRec = 0, sumDir = 0, sumSac = 0, sumTotal = 0, sumTotalUnid = 0;
     tbody.querySelectorAll('tr.dep-data-row').forEach(tr => {
@@ -2127,8 +2126,10 @@ window.descargarDepositoExcel = async function () {
                         let val = 0;
                         if (input) {
                             try {
-                                const clean = (input.value || '').toString().replace(/[^0-9+\-*/.]/g, '');
-                                if (clean) val = parseFloat(new Function('return ' + clean)()) || 0;
+                                const valor = (typeof window.evaluarAritmetica === 'function')
+                                    ? window.evaluarAritmetica(input.value || '')
+                                    : null;
+                                if (valor !== null) val = valor;
                             } catch { }
                         }
                         const histInput = tr.querySelector(`[data-histfield="${field}"]`);
