@@ -30,6 +30,11 @@ where powershell 2>nul
 if errorlevel 1 echo    No encontrado.
 
 echo.
+echo  PowerShell 7 ^(pwsh^):
+where pwsh 2>nul
+if errorlevel 1 echo    No encontrado.
+
+echo.
 echo  Cliente SSH:
 where ssh 2>nul
 if errorlevel 1 echo    No encontrado.

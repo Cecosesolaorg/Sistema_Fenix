@@ -38,11 +38,17 @@ if /i not "%RESPUESTA%"=="S" (
     goto :sin_node
 )
 
+set "PS_EXE="
 where powershell >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 set "PS_EXE=powershell"
+if not defined PS_EXE (
+    where pwsh >nul 2>&1
+    if not errorlevel 1 set "PS_EXE=pwsh"
+)
+if not defined PS_EXE (
     color 0C
     echo.
-    echo  ERROR: no se encontro PowerShell en esta PC.
+    echo  ERROR: no se encontro PowerShell ni pwsh.
     echo  Copia la carpeta tools\node_portable desde otra PC
     echo  o instala Node.js desde https://nodejs.org
     echo.
@@ -50,8 +56,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist "%~dp0tools\instalar-node.ps1" (
+    color 0C
+    echo.
+    echo  ERROR: falta el archivo tools\instalar-node.ps1
+    echo  Volve a copiar la carpeta tools completa del proyecto.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\instalar-node.ps1"
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\instalar-node.ps1"
 if errorlevel 1 goto :sin_node
 call :detectar_node
 if defined NODE_EXE goto :tengo_node
