@@ -29,6 +29,7 @@ En Windows hay dos accesos directos:
 |---|---|
 | `iniciar_servidor.bat` | levanta el servidor en la red local |
 | `iniciar_con_internet.bat` | levanta el servidor y abre un túnel SSH con Serveo |
+| `donde-esta-node.bat` | diagnóstico: muestra qué Node se detecta y desde dónde |
 
 Ambos scripts buscan Node.js automáticamente, en este orden:
 
