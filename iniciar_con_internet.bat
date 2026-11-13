@@ -29,9 +29,26 @@ if exist "%~dp0tools\node_portable.zip" (
     echo  en tools\node_portable.zip.
     echo.
 )
-choice /C SN /N /M "  Descargar e instalar Node.js ahora? [S/N] "
-if errorlevel 255 exit /b 1
-if errorlevel 2 goto :sin_node
+set "RESPUESTA="
+set /p "RESPUESTA=  Descargar e instalar Node.js ahora? [S/N] "
+if /i "%RESPUESTA%"=="N" goto :sin_node
+if /i not "%RESPUESTA%"=="S" (
+    echo.
+    echo  Respuesta no valida: se cancela la instalacion.
+    goto :sin_node
+)
+
+where powershell >nul 2>&1
+if errorlevel 1 (
+    color 0C
+    echo.
+    echo  ERROR: no se encontro PowerShell en esta PC.
+    echo  Copia la carpeta tools\node_portable desde otra PC
+    echo  o instala Node.js desde https://nodejs.org
+    echo.
+    pause
+    exit /b 1
+)
 
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\instalar-node.ps1"
