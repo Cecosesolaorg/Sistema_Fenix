@@ -153,6 +153,23 @@ el archivo con permisos `600` y, si la cédula ya existe, actualiza la clave y e
 rol sin duplicar la cuenta. No hace falta reiniciar el servidor: cada login lee
 la carpeta `registros/` de nuevo.
 
+### Productos agregados durante el inventario
+
+Cualquier persona con sesión puede agregar al pasillo un producto que no esté
+en la lista. El producto se guarda en `registros/pasillos_config.json` y el
+resto de los teléfonos del mismo pasillo lo ve **en unos segundos**, sin
+recargar la página.
+
+- Los nombres se comparan sin distinguir mayúsculas, acentos, guiones ni
+  espacios: `COCA COLA 1.5` y `COCA-COLA 1,5` cuentan como el mismo producto.
+- Renombrar o eliminar un producto agregado también se comparte entre los
+  teléfonos.
+- Si un teléfono está sin conexión, el producto se agrega solo ahí y se avisa
+  en pantalla.
+- Los conteos siguen siendo de cada teléfono: cada persona envía su reporte.
+- Los productos que el admin agrega al catálogo desde el panel aparecen al
+  recargar el pasillo.
+
 ## Seguridad
 
 Estado actual del proyecto:

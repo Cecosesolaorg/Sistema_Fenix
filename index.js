@@ -451,11 +451,32 @@ transitionToPasillos = function () {
         fetch(baseUrl + '/api/pasillos-config?t=' + Date.now())
             .then(res => res.json())
             .then(configGlobal => {
-                if (configGlobal && Object.keys(configGlobal).length > 0) {
-                    const configLocal = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}');
-                    const configFusionada = { ...configLocal, ...configGlobal };
-                    localStorage.setItem('fenix_pasillos_config', JSON.stringify(configFusionada));
-                }
+                if (!configGlobal || typeof configGlobal !== 'object') return;
+
+                const configLocal = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
+                const configFusionada = Object.assign({}, configLocal);
+
+                Object.keys(configGlobal).forEach(function (key) {
+                    const remoto = configGlobal[key] || {};
+                    const local = configLocal[key] || {};
+
+                    // Extras: manda el servidor, pero no se pierden los que este
+                    // teléfono agregó y todavía no pudo compartir (van al final,
+                    // en índices que el servidor todavía no conoce).
+                    const extras = Array.isArray(remoto.extraProducts) ? remoto.extraProducts.slice() : [];
+                    const locales = Array.isArray(local.extraProducts) ? local.extraProducts : [];
+                    for (let i = extras.length; i < locales.length; i++) {
+                        if (locales[i] !== undefined) extras[i] = locales[i];
+                    }
+
+                    configFusionada[key] = Object.assign({}, local, remoto, {
+                        extraProducts: extras,
+                        renamedProducts: Object.assign({}, remoto.renamedProducts || {}, local.renamedProducts || {}),
+                        scannedProducts: Object.assign({}, remoto.scannedProducts || {}, local.scannedProducts || {})
+                    });
+                });
+
+                localStorage.setItem('fenix_pasillos_config', JSON.stringify(configFusionada));
             })
             .catch(e => console.log('Usando config de pasillos local'))
             .finally(() => {

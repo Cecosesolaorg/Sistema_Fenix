@@ -344,6 +344,57 @@ function writeProductsData(data) {
     try { fs.chmodSync(PRODUCTS_JSON, 0o600); } catch (e) { }
 }
 
+// ── Configuración de pasillos y productos agregados ─────────────────────────
+// Los extras ("productos agregados temporalmente") se guardan aquí para que
+// todos los dispositivos del mismo pasillo los vean.
+const PASILLOS_CONFIG_PATH = path.join(DIRECTORY, 'pasillos_config.json');
+const MAX_EXTRAS_POR_PASILLO = 500;
+
+/** Clave de comparación: mayúsculas, sin acentos y sin signos. */
+function normalizarNombreProducto(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9*]+/g, ' ')
+        .trim();
+}
+
+function readPasillosConfig() {
+    try {
+        const data = JSON.parse(fs.readFileSync(PASILLOS_CONFIG_PATH, 'utf8'));
+        return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+/** Escritura atómica: nunca deja el archivo a medio escribir. */
+function writePasillosConfig(data) {
+    const tmp = PASILLOS_CONFIG_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 4) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, PASILLOS_CONFIG_PATH);
+    try { fs.chmodSync(PASILLOS_CONFIG_PATH, 0o600); } catch (e) { }
+}
+
+/** Anota una acción en registros/historial.json (máximo 500 eventos). */
+function registrarHistorial(usuario, accion) {
+    try {
+        const historialPath = path.join(DIRECTORY, 'historial.json');
+        let historial = [];
+        if (fs.existsSync(historialPath)) {
+            historial = JSON.parse(fs.readFileSync(historialPath, 'utf8'));
+        }
+        if (!Array.isArray(historial)) historial = [];
+        historial.unshift({
+            usuario: usuario || 'Usuario',
+            accion: accion,
+            fecha: new Date().toISOString()
+        });
+        fs.writeFileSync(historialPath, JSON.stringify(historial.slice(0, 500), null, 4),
+            { encoding: 'utf8', mode: 0o600 });
+    } catch (e) { /* el historial nunca debe romper la operación */ }
+}
+
 let productsScriptCache = { stamp: '', body: '' };
 
 /** Genera el JS que consume el navegador, inyectando los datos como JSON. */
@@ -1210,8 +1261,34 @@ const requestHandler = (req, res) => {
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
-                const configPath = path.join(DIRECTORY, 'pasillos_config.json');
-                fs.writeFileSync(configPath, JSON.stringify(data, null, 4), 'utf8');
+                if (!data || typeof data !== 'object' || Array.isArray(data)) {
+                    throw new Error('Configuración inválida');
+                }
+
+                // Se parte de la configuración actual y se aplica la del panel.
+                // Los extras que el panel no conoce (agregados desde otro
+                // dispositivo) se conservan para no perderlos.
+                const actual = readPasillosConfig();
+                const fusion = Object.assign({}, actual);
+
+                for (const key of Object.keys(data)) {
+                    const previo = actual[key] || {};
+                    const nuevo = (data[key] && typeof data[key] === 'object') ? data[key] : {};
+                    const extrasPrevios = Array.isArray(previo.extraProducts) ? previo.extraProducts.slice() : [];
+                    const extrasNuevos = Array.isArray(nuevo.extraProducts) ? nuevo.extraProducts.slice() : [];
+
+                    // El servidor manda en los índices que ya conoce: conserva
+                    // renombres y eliminaciones hechos desde otro dispositivo.
+                    // Lo que el servidor no tiene se respeta como extra local.
+                    const fusionExtras = extrasPrevios.slice();
+                    for (let i = extrasPrevios.length; i < extrasNuevos.length; i++) {
+                        if (extrasNuevos[i] !== undefined) fusionExtras[i] = extrasNuevos[i];
+                    }
+
+                    fusion[key] = Object.assign({}, previo, nuevo, { extraProducts: fusionExtras });
+                }
+
+                writePasillosConfig(fusion);
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'success' }));
@@ -1634,6 +1711,159 @@ const requestHandler = (req, res) => {
 
             sendJson(res, 200, { status: 'success', message: 'Producto agregado' });
 
+        });
+
+    } else if (req.method === 'POST' && req.url === '/api/agregar-producto-pasillo') {
+        // Cualquier usuario con sesión puede agregar un producto al pasillo que
+        // está contando. Se comparte con el resto de los dispositivos.
+        readJsonBody(req, res, (data) => {
+            const pasilloId = validPasilloId(data.pasilloId);
+            const nombre = validProductName(String(data.nombre || '').toUpperCase());
+
+            if (!pasilloId || !nombre) {
+                sendJson(res, 400, { status: 'error', message: 'Datos de producto inválidos' });
+                return;
+            }
+
+            const catalogo = readProductsData();
+            const config = readPasillosConfig();
+            const tieneConfig = Object.prototype.hasOwnProperty.call(config, pasilloId);
+            if (!Array.isArray(catalogo[pasilloId]) && !tieneConfig) {
+                sendJson(res, 404, { status: 'error', message: 'Pasillo no encontrado' });
+                return;
+            }
+
+            const entrada = config[pasilloId] || { enabled: true, extraProducts: [] };
+            if (!Array.isArray(entrada.extraProducts)) entrada.extraProducts = [];
+
+            // Nombres que ya existen: catálogo, renombres, extras y escaneados.
+            const existentes = new Map();
+            const registrar = (n) => {
+                const clave = normalizarNombreProducto(n);
+                if (clave && !existentes.has(clave)) existentes.set(clave, n);
+            };
+            (catalogo[pasilloId] || []).forEach(registrar);
+            if (entrada.renamedProducts) Object.values(entrada.renamedProducts).forEach(registrar);
+            if (entrada.scannedProducts) Object.values(entrada.scannedProducts).forEach(registrar);
+            entrada.extraProducts.forEach(registrar);
+
+            const clave = normalizarNombreProducto(nombre);
+            if (existentes.has(clave)) {
+                const index = entrada.extraProducts.findIndex(
+                    (n) => n && normalizarNombreProducto(n) === clave
+                );
+                sendJson(res, 200, {
+                    status: 'exists',
+                    nombre: existentes.get(clave),
+                    index: index
+                });
+                return;
+            }
+
+            if (entrada.extraProducts.length >= MAX_EXTRAS_POR_PASILLO) {
+                sendJson(res, 400, { status: 'error', message: 'El pasillo alcanzó el máximo de productos agregados' });
+                return;
+            }
+
+            const index = entrada.extraProducts.length;
+            entrada.extraProducts.push(nombre);
+            config[pasilloId] = entrada;
+
+            try {
+                writePasillosConfig(config);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo guardar el producto' });
+                return;
+            }
+
+            registrarHistorial(session.nombre,
+                `Agregó el producto ${nombre} al pasillo ${entrada.name || pasilloId}`);
+            sendJson(res, 200, { status: 'success', nombre: nombre, index: index });
+        });
+
+    } else if (req.method === 'POST' && req.url === '/api/eliminar-producto-pasillo') {
+        // Marca el extra como null: conserva los índices de los demás productos.
+        readJsonBody(req, res, (data) => {
+            const pasilloId = validPasilloId(data.pasilloId);
+            const index = Number(data.index);
+
+            if (!pasilloId || !Number.isInteger(index) || index < 0) {
+                sendJson(res, 400, { status: 'error', message: 'Datos inválidos' });
+                return;
+            }
+
+            const config = readPasillosConfig();
+            const entrada = config[pasilloId];
+            if (!entrada || !Array.isArray(entrada.extraProducts) || index >= entrada.extraProducts.length) {
+                sendJson(res, 404, { status: 'error', message: 'Producto no encontrado' });
+                return;
+            }
+
+            const nombre = entrada.extraProducts[index];
+            entrada.extraProducts[index] = null;
+
+            try {
+                writePasillosConfig(config);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo eliminar el producto' });
+                return;
+            }
+
+            registrarHistorial(session.nombre,
+                `Eliminó el producto ${nombre || ''} del pasillo ${entrada.name || pasilloId}`);
+            sendJson(res, 200, { status: 'success', nombre: nombre || '' });
+        });
+
+    } else if (req.method === 'POST' && req.url === '/api/renombrar-producto-pasillo') {
+        readJsonBody(req, res, (data) => {
+            const pasilloId = validPasilloId(data.pasilloId);
+            const index = Number(data.index);
+            const nombre = validProductName(String(data.nombre || '').toUpperCase());
+
+            if (!pasilloId || !Number.isInteger(index) || index < 0 || !nombre) {
+                sendJson(res, 400, { status: 'error', message: 'Datos inválidos' });
+                return;
+            }
+
+            const config = readPasillosConfig();
+            const entrada = config[pasilloId];
+            if (!entrada || !Array.isArray(entrada.extraProducts) || !entrada.extraProducts[index]) {
+                sendJson(res, 404, { status: 'error', message: 'Producto no encontrado' });
+                return;
+            }
+
+            // No permitir que un extra tome el nombre de otro producto del pasillo.
+            const clave = normalizarNombreProducto(nombre);
+            const catalogo = readProductsData();
+            const existentes = new Set();
+            (catalogo[pasilloId] || []).forEach((n) => existentes.add(normalizarNombreProducto(n)));
+            if (entrada.renamedProducts) {
+                Object.values(entrada.renamedProducts).forEach((n) => existentes.add(normalizarNombreProducto(n)));
+            }
+            if (entrada.scannedProducts) {
+                Object.values(entrada.scannedProducts).forEach((n) => existentes.add(normalizarNombreProducto(n)));
+            }
+            entrada.extraProducts.forEach((n, i) => {
+                if (i !== index && n) existentes.add(normalizarNombreProducto(n));
+            });
+            if (existentes.has(clave)) {
+                sendJson(res, 409, { status: 'error', message: 'Ya existe un producto con ese nombre' });
+                return;
+            }
+
+            const anterior = entrada.extraProducts[index];
+            entrada.extraProducts[index] = nombre;
+
+            try {
+                writePasillosConfig(config);
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo renombrar el producto' });
+                return;
+            }
+
+            registrarHistorial(session.nombre,
+                `Renombró ${anterior} a ${nombre} en el pasillo ${entrada.name || pasilloId}`);
+            sendJson(res, 200, { status: 'success', nombre: nombre, anterior: anterior });
         });
 
     } else if (req.method === 'POST' && req.url === '/api/eliminar-pasillo') {

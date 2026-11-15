@@ -65,7 +65,7 @@ if (window.ALL_PRODUCTS && window.ALL_PRODUCTS[pasilloId]) {
         cfg.extraProducts.forEach((extraName, idx) => {
             if (extraName) {
                 PRODUCTOS.push({
-                    code: `P-${pasilloId.substring(0, 2)}-E${String(idx + 1).padStart(3, '0')}`,
+                    code: (window.codigoExtraPasillo ? window.codigoExtraPasillo(pasilloId, idx) : `P-${pasilloId.substring(0, 2)}-E${String(idx + 1).padStart(3, '0')}`),
                     name: String(extraName || '').trim().toUpperCase(),
                     stockRef: 0,
                     unidad: 'unidades',

@@ -198,6 +198,32 @@ certificados.
 El primer arranque funciona en una PC sin Node y sin permisos de administrador,
 y los errores de comillas y de comandos inexistentes dejan de aparecer.
 
+### 8. Productos agregados compartidos entre dispositivos
+
+**Qué se cambió**
+
+- `POST /api/agregar-producto-pasillo`: cualquier usuario con sesión agrega un
+  producto al pasillo; se guarda en `registros/pasillos_config.json`.
+- `POST /api/eliminar-producto-pasillo` y `POST /api/renombrar-producto-pasillo`:
+  comparten la eliminación y el renombre; los índices se conservan con `null`.
+- `src/productos_sync.js`: cada 5 segundos revisa la configuración del servidor
+  e incorpora los productos nuevos sin recargar ni perder los conteos.
+- `src/seguridad.js`: `normalizarProducto` compara nombres sin acentos,
+  mayúsculas, guiones ni espacios; `codigoExtraPasillo` genera el código
+  `P-xx-E###` de forma estable.
+- El servidor rechaza duplicados por nombre normalizado, incluso contra el
+  catálogo base.
+- `POST /api/pasillos-config` ahora fusiona en vez de sobrescribir: conserva los
+  extras que el panel del admin todavía no conoce.
+- `index.js` ya no pisa la configuración local completa al iniciar sesión.
+- Los cambios quedan registrados en `registros/historial.json`.
+
+**Cómo mejora**
+
+Dos personas en el mismo pasillo ven el mismo producto agregado y no necesitan
+escribirlo dos veces con nombres distintos. Los reportes se comparan sobre la
+misma lista y se evitan filas duplicadas por variantes del nombre.
+
 ---
 
 ## Hallazgos corregidos

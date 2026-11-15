@@ -28,6 +28,23 @@
     };
 
     /**
+     * Clave para comparar nombres de producto: mayúsculas, sin acentos y sin
+     * signos. Dos variantes del mismo nombre producen la misma clave.
+     */
+    window.normalizarProducto = function (nombre) {
+        return String(nombre === null || nombre === undefined ? '' : nombre)
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9*]+/g, ' ')
+            .trim();
+    };
+
+    /** Código estable de un producto agregado (extra) según su posición. */
+    window.codigoExtraPasillo = function (pasillo, indice) {
+        return 'P-' + String(pasillo || '').substring(0, 2) + '-E' + String(indice + 1).padStart(3, '0');
+    };
+
+    /**
      * Evalúa aritmética básica sin eval ni new Function.
      * Acepta números, + - * / y paréntesis. Devuelve null si no es válida.
      */

@@ -180,28 +180,71 @@ function cerrarModalRenombrar() {
     productoARenombrar = null;
 }
 
-function confirmarRenombrar() {
+async function confirmarRenombrar() {
     if (!productoARenombrar) return;
-    const nuevoNombre = document.getElementById('input-nuevo-nombre').value;
-    if (nuevoNombre && nuevoNombre.trim() !== "") {
-        productoARenombrar.name = nuevoNombre.trim().toUpperCase();
 
-        // Guardar configuración en localStorage
-        const config = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
-        if (!config[pasilloId]) config[pasilloId] = { enabled: true, extraProducts: [], renamedProducts: {} };
-        if (productoARenombrar.isExtra) {
-            config[pasilloId].extraProducts[productoARenombrar.idx] = productoARenombrar.name;
-        } else {
-            if (!config[pasilloId].renamedProducts) config[pasilloId].renamedProducts = {};
-            config[pasilloId].renamedProducts[productoARenombrar.idx] = productoARenombrar.name;
-        }
-        localStorage.setItem('fenix_pasillos_config', JSON.stringify(config));
-
-        const safeId = productoARenombrar.code.replace(/\W/g, '_');
-        const nameEl = document.getElementById('name-' + safeId);
-        if (nameEl) nameEl.textContent = productoARenombrar.name;
-        mostrarToast('✅ Producto renombrado');
+    const input = document.getElementById('input-nuevo-nombre');
+    const nuevo = String(input ? input.value : '').trim().toUpperCase();
+    if (!nuevo) {
+        cerrarModalRenombrar();
+        return;
     }
+
+    const clave = window.normalizarProducto(nuevo);
+    const repetido = PRODUCTOS.find(
+        p => p !== productoARenombrar && window.normalizarProducto(p.name) === clave
+    );
+    if (repetido) {
+        mostrarToast('⚠️ Ya existe otro producto con ese nombre');
+        return;
+    }
+
+    const producto = productoARenombrar;
+    const esExtraCompartido = producto.isExtra && /-E\d+$/.test(producto.code);
+    const idx = Number.isInteger(producto.idx) ? producto.idx : null;
+
+    if (esExtraCompartido && idx !== null) {
+        try {
+            const res = await fetch('/api/renombrar-producto-pasillo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pasilloId: pasilloId, index: idx, nombre: nuevo })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 409) {
+                mostrarToast('⚠️ ' + (data.message || 'Ese nombre ya existe'));
+                return;
+            }
+        } catch (e) {
+            // Sin red: se renombra solo en este teléfono.
+        }
+    }
+
+    producto.name = nuevo;
+
+    const config = leerConfigPasillos();
+    if (!config[pasilloId]) config[pasilloId] = { enabled: true, extraProducts: [], renamedProducts: {} };
+
+    if (esExtraCompartido && idx !== null) {
+        if (!Array.isArray(config[pasilloId].extraProducts)) config[pasilloId].extraProducts = [];
+        while (config[pasilloId].extraProducts.length <= idx) config[pasilloId].extraProducts.push(null);
+        config[pasilloId].extraProducts[idx] = nuevo;
+    } else if (producto.isExtra) {
+        if (!config[pasilloId].scannedProducts) config[pasilloId].scannedProducts = {};
+        config[pasilloId].scannedProducts[producto.code] = nuevo;
+    } else {
+        if (!config[pasilloId].renamedProducts) config[pasilloId].renamedProducts = {};
+        config[pasilloId].renamedProducts[idx] = nuevo;
+    }
+    guardarConfigPasillos(config);
+
+    const safeId = producto.code.replace(/\W/g, '_');
+    const nameEl = document.getElementById('name-' + safeId);
+    if (nameEl) nameEl.textContent = nuevo;
+
+    mostrarToast(esExtraCompartido
+        ? '✅ Producto renombrado para todo el pasillo'
+        : '✅ Producto renombrado');
     cerrarModalRenombrar();
 }
 
@@ -389,10 +432,22 @@ function cerrarModalAgregar() {
     }
 }
 
-function confirmarAgregarProducto() {
+function leerConfigPasillos() {
+    try {
+        return JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarConfigPasillos(config) {
+    localStorage.setItem('fenix_pasillos_config', JSON.stringify(config));
+}
+
+async function confirmarAgregarProducto() {
     const input = document.getElementById('input-nuevo-producto');
-    const nombre = input ? input.value : '';
-    if (!nombre || !nombre.trim()) {
+    const nombre = String(input ? input.value : '').trim().toUpperCase();
+    if (!nombre) {
         if (input) {
             input.style.borderColor = '#ff4444';
             input.focus();
@@ -401,27 +456,81 @@ function confirmarAgregarProducto() {
     }
     if (input) input.style.borderColor = 'rgba(255,255,255,0.15)'; // reset
 
+    // Mismo producto aunque cambien acentos, guiones o espacios.
+    const clave = window.normalizarProducto(nombre);
+    const repetido = PRODUCTOS.find(p => window.normalizarProducto(p.name) === clave);
+    if (repetido) {
+        cerrarModalAgregar();
+        mostrarToast('⚠️ Ese producto ya está en la lista: ' + repetido.name);
+        return;
+    }
+
     cerrarModalAgregar();
 
-    const config = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
+    // Se intenta compartir con el servidor; si no hay red queda solo local.
+    let index = null;
+    let compartido = false;
+    try {
+        const res = await fetch('/api/agregar-producto-pasillo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pasilloId: pasilloId, nombre: nombre })
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.status === 'success' && Number.isInteger(data.index)) {
+            index = data.index;
+            compartido = true;
+        } else if (res.ok && data.status === 'exists') {
+            if (Number.isInteger(data.index) && data.index >= 0) {
+                index = data.index;
+                compartido = true;
+            } else {
+                mostrarToast('⚠️ Ya existe en el pasillo: ' + (data.nombre || nombre));
+                return;
+            }
+        } else {
+            throw new Error(data.message || ('Error ' + res.status));
+        }
+    } catch (e) {
+        mostrarToast('⚠️ Sin conexión: se agrega solo en este teléfono');
+    }
+
+    const config = leerConfigPasillos();
     if (!config[pasilloId]) config[pasilloId] = { enabled: true, extraProducts: [], renamedProducts: {} };
-    if (!config[pasilloId].extraProducts) config[pasilloId].extraProducts = [];
+    if (!Array.isArray(config[pasilloId].extraProducts)) config[pasilloId].extraProducts = [];
+    const extras = config[pasilloId].extraProducts;
 
-    const idx = config[pasilloId].extraProducts.length;
-    let code = `P-${pasilloId.substring(0, 2)}-E${String(idx + 1).padStart(3, '0')}`;
-    config[pasilloId].extraProducts.push(nombre.trim().toUpperCase());
+    if (index === null) {
+        index = extras.findIndex(n => !n);
+        if (index === -1) index = extras.length;
+    }
+    while (extras.length <= index) extras.push(null);
+    extras[index] = nombre;
+    guardarConfigPasillos(config);
 
-    localStorage.setItem('fenix_pasillos_config', JSON.stringify(config));
+    const code = window.codigoExtraPasillo(pasilloId, index);
+    if (PRODUCTOS.some(p => p.code === code)) {
+        mostrarToast('⚠️ Ese producto ya está en la lista');
+        return;
+    }
 
-    PRODUCTOS.push({ code: code, name: nombre.trim().toUpperCase(), stockRef: 0, unidad: 'unidades', isExtra: true, idx: idx });
+    PRODUCTOS.push({
+        code: code,
+        name: nombre,
+        stockRef: 0,
+        unidad: 'unidades',
+        isExtra: true,
+        idx: index
+    });
     conteos[code] = 0;
     historiales[code] = '0';
     checkStates[code] = 0;
 
-    // Anteriormente se enviaba a la lista de pendientes, ya no es necesario.
-
     renderProductos();
-    mostrarToast('✅ Producto agregado temporalmente');
+    mostrarToast(compartido
+        ? '✅ Producto agregado y compartido con el pasillo'
+        : '✅ Producto agregado en este teléfono');
 
     // Scroll hacia el final
     setTimeout(() => {
@@ -430,40 +539,55 @@ function confirmarAgregarProducto() {
 }
 
 // ─── ELIMINAR PRODUCTO AGREGADO ────────────────────────────────────────
-window.eliminarProductoExtra = function (code) {
+window.eliminarProductoExtra = async function (code) {
     if (!confirm("¿Estás seguro de que deseas eliminar este producto agregado manualmente?")) return;
 
-    const idx = PRODUCTOS.findIndex(p => p.code === code);
-    if (idx !== -1) {
-        let prod = PRODUCTOS[idx];
-        PRODUCTOS.splice(idx, 1);
+    const posicion = PRODUCTOS.findIndex(p => p.code === code);
+    if (posicion === -1) return;
 
-        const config = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
-        if (config[pasilloId]) {
-            if (prod.code.includes('-E')) {
-                if (!config[pasilloId].extraProducts) config[pasilloId].extraProducts = [];
-                config[pasilloId].extraProducts[prod.idx] = null;
-            }
-            localStorage.setItem('fenix_pasillos_config', JSON.stringify(config));
+    const prod = PRODUCTOS[posicion];
+    const esExtraCompartido = prod.isExtra && /-E\d+$/.test(prod.code) && Number.isInteger(prod.idx);
+
+    if (esExtraCompartido) {
+        try {
+            const res = await fetch('/api/eliminar-producto-pasillo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pasilloId: pasilloId, index: prod.idx })
+            });
+            if (!res.ok) throw new Error('El servidor no confirmó la eliminación');
+        } catch (e) {
+            mostrarToast('⚠️ Sin conexión: la eliminación no se compartió');
         }
-
-        const safeId = code.replace(/\W/g, '_');
-        const cardEl = document.getElementById('card-' + safeId);
-        if (cardEl) {
-            cardEl.remove();
-        }
-
-        delete conteos[code];
-        delete historiales[code];
-        delete checkStates[code];
-
-        localStorage.setItem(LS_KEY, JSON.stringify(conteos));
-        localStorage.setItem(`fenix_${pasilloId}_historiales`, JSON.stringify(historiales));
-        localStorage.setItem(`fenix_${pasilloId}_check`, JSON.stringify(checkStates));
-
-        actualizarStats();
-        mostrarToast('❌ Producto devuelto al vacío');
     }
+
+    PRODUCTOS.splice(posicion, 1);
+
+    const config = leerConfigPasillos();
+    if (config[pasilloId]) {
+        if (prod.code.includes('-E')) {
+            if (!Array.isArray(config[pasilloId].extraProducts)) config[pasilloId].extraProducts = [];
+            if (Number.isInteger(prod.idx)) config[pasilloId].extraProducts[prod.idx] = null;
+        }
+        guardarConfigPasillos(config);
+    }
+
+    const safeId = code.replace(/\W/g, '_');
+    const cardEl = document.getElementById('card-' + safeId);
+    if (cardEl) {
+        cardEl.remove();
+    }
+
+    delete conteos[code];
+    delete historiales[code];
+    delete checkStates[code];
+
+    localStorage.setItem(LS_KEY, JSON.stringify(conteos));
+    localStorage.setItem(`fenix_${pasilloId}_historiales`, JSON.stringify(historiales));
+    localStorage.setItem(`fenix_${pasilloId}_check`, JSON.stringify(checkStates));
+
+    actualizarStats();
+    mostrarToast('❌ Producto eliminado');
 };
 
 // ─── PUENTE CALCULADORA PREMIUM ────────────────────────────────────────
