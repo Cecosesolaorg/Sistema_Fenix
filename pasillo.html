@@ -1224,10 +1224,27 @@
     <script src="src/productos_sync.js?v=1"></script>
 
     <script src="src/session.js?v=1.2"></script>
-    <script src="src/exports_pasillo.js?v=1.4"></script>
+    <script src="src/exports_pasillo.js?v=1.6"></script>
     <script>
         // INIT
         renderProductos();
+
+        // ─── SESIÓN VIVA ─── //
+        // Si el servidor se reinició o la cookie venció, avisar antes de que
+        // la persona cargue todo el inventario y falle recién al enviar.
+        (function validarSesionViva() {
+            if (window.location.protocol === 'file:') return;
+            fetch('/api/me', { cache: 'no-store' })
+                .then(function (res) {
+                    if (res.status !== 401) return;
+                    mostrarToast('🔒 Tu sesión expiró. Volvé a iniciar sesión.');
+                    setTimeout(function () {
+                        window.permitirSalida = true;
+                        window.location.href = '/?sesion=expirada';
+                    }, 1800);
+                })
+                .catch(function () { /* sin red: se sigue trabajando local */ });
+        })();
 
         // ─── VERIFICADOR DE SESIÓN GLOBAL ─── //
         setInterval(() => {
@@ -1245,6 +1262,7 @@
                         if (globalTime > loginTime || kickTime > loginTime) {
                             alert('Tu sesión ha sido cerrada remotamente por un administrador.');
                             localStorage.removeItem('currentUser');
+                            window.permitirSalida = true;
                             window.location.href = 'index.html';
                         }
                     }).catch(() => { });

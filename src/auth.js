@@ -10,9 +10,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const COOKIE_NAME = 'fenix_sid';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
+
+// Las sesiones se guardan en registros/sesiones.json (sólo hashes) para que
+// reiniciar el servidor no obligue a todos a volver a iniciar sesión.
+const SESSIONS_FILE = path.join(__dirname, '..', 'registros', 'sesiones.json');
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -74,42 +80,92 @@ function verifyPassword(password, stored) {
 
 // ── Sesiones ────────────────────────────────────────────────────────────────
 
-const sessions = new Map(); // token -> { cedula, nombre, role, createdAt, expiresAt }
+// token (hash) -> { cedula, nombre, role, createdAt, expiresAt }
+const sessions = new Map();
+
+/** La cookie nunca se guarda en disco: sólo su hash. */
+function tokenHash(token) {
+    return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+function guardarSesiones() {
+    try {
+        const ahora = Date.now();
+        const data = {};
+        for (const [hash, session] of sessions) {
+            if (session && Number(session.expiresAt) > ahora) data[hash] = session;
+        }
+        const dir = path.dirname(SESSIONS_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
+        try { fs.chmodSync(SESSIONS_FILE, 0o600); } catch (e) { }
+    } catch (e) {
+        // Nunca debe romper el login por un problema de disco.
+        console.error('No se pudieron guardar las sesiones:', e.message);
+    }
+}
+
+function cargarSesiones() {
+    try {
+        if (!fs.existsSync(SESSIONS_FILE)) return;
+        const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')) || {};
+        const ahora = Date.now();
+        for (const hash of Object.keys(data)) {
+            const session = data[hash];
+            if (!session || !session.cedula) continue;
+            if (Number(session.expiresAt) <= ahora) continue;
+            sessions.set(hash, session);
+        }
+    } catch (e) {
+        console.error('No se pudieron leer las sesiones guardadas:', e.message);
+    }
+}
+
+cargarSesiones();
 
 function createSession(user) {
     const token = crypto.randomBytes(32).toString('base64url');
     const now = Date.now();
-    sessions.set(token, {
+    sessions.set(tokenHash(token), {
         cedula: String(user.cedula),
         nombre: user.nombre || '',
         role: user.role || 'user',
         createdAt: now,
         expiresAt: now + SESSION_TTL_MS
     });
+    guardarSesiones();
     return token;
 }
 
 function getSession(token) {
     if (!token) return null;
-    const session = sessions.get(token);
+    const hash = tokenHash(token);
+    const session = sessions.get(hash);
     if (!session) return null;
     if (session.expiresAt <= Date.now()) {
-        sessions.delete(token);
+        sessions.delete(hash);
+        guardarSesiones();
         return null;
     }
     return session;
 }
 
 function destroySession(token) {
-    if (token) sessions.delete(token);
+    if (!token) return;
+    if (sessions.delete(tokenHash(token))) guardarSesiones();
 }
 
 /** Invalida todas las sesiones de una cédula (cambio de rol, expulsión, etc.). */
 function destroySessionsForUser(cedula) {
     const target = String(cedula);
-    for (const [token, session] of sessions) {
-        if (session.cedula === target) sessions.delete(token);
+    let cambio = false;
+    for (const [hash, session] of sessions) {
+        if (session.cedula === target) {
+            sessions.delete(hash);
+            cambio = true;
+        }
     }
+    if (cambio) guardarSesiones();
 }
 
 function parseCookies(header) {

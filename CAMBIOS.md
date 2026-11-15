@@ -275,6 +275,35 @@ memoria de cada persona.
 
 ---
 
+### 11. Sesiones que sobreviven al reinicio y aviso de sesión expirada
+
+**Por qué aparecía el error 401**
+
+Las sesiones vivían sólo en memoria. Cada reinicio del servidor (por ejemplo,
+al desplegar una actualización) las borraba, pero el teléfono seguía mostrando
+el pasillo como si nada; el fallo recién aparecía al pulsar **Enviar al
+Sistema**, con `401 Sesión no válida`. También pasa si se abre el pasillo en un
+equipo donde nunca se inició sesión, o con una cookie de otro host.
+
+**Qué se cambió**
+
+- `src/auth.js` guarda las sesiones en `registros/sesiones.json` con permisos
+  `600`. En disco queda sólo el hash SHA-256 del token, nunca la cookie.
+- Al arrancar se cargan las sesiones vigentes y se descartan las vencidas.
+  Crear, cerrar o expulsar una sesión actualiza el archivo.
+- `pasillo.html` consulta `GET /api/me` al abrir: si responde 401, muestra
+  «Tu sesión expiró» y vuelve al login.
+- Si el 401 ocurre al enviar el reporte, `src/exports_pasillo.js` muestra el
+  mismo aviso y redirige al login, sin dejar el botón colgado.
+- `index.js` muestra un aviso visible al volver por sesión expirada.
+
+**Cómo mejora**
+
+Un despliegue ya no interrumpe a los teléfonos que están inventariando, y si
+una sesión vence de verdad, la persona se entera antes de cargar el pasillo.
+
+---
+
 ## Hallazgos corregidos
 
 | ID | Hallazgo | Estado |

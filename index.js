@@ -681,6 +681,19 @@ if (document.readyState === 'loading') {
 // Exponer globalmente para re-renderizar tras el login
 window.renderizarPasillosInicio = renderizarPasillosInicio;
 
+// ─── AVISO DE SESIÓN EXPIRADA ─────────────────────────────────────────
+// El pasillo redirige acá cuando la cookie dejó de ser válida.
+(function avisarSesionExpirada() {
+    if (new URLSearchParams(location.search).get('sesion') !== 'expirada') return;
+    setTimeout(function () {
+        const aviso = document.createElement('div');
+        aviso.textContent = '🔒 Tu sesión expiró. Volvé a iniciar sesión.';
+        aviso.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:12px 22px;border-radius:50px;font-weight:700;font-size:0.9rem;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;max-width:90vw;';
+        document.body.appendChild(aviso);
+        setTimeout(function () { aviso.remove(); }, 7000);
+    }, 300);
+})();
+
 // ─── VERIFICADOR RÁPIDO DE CONEXIÓN WIFI ──────────────────────────────
 let fallosConexionInicio = 0;
 async function verificarConexionRapida() {

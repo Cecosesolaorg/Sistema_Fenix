@@ -215,6 +215,11 @@ Estado actual del proyecto:
 
 - `POST /api/login` valida cédula y contraseña en el servidor y devuelve una
   cookie `HttpOnly`, `SameSite=Lax`, válida 12 horas.
+- Las sesiones se guardan en `registros/sesiones.json` (solo hashes, permisos
+  `600`). Reiniciar el servidor o desplegar una actualización ya **no** obliga a
+  todos a volver a iniciar sesión.
+- Si una cookie venció, el pasillo avisa «Tu sesión expiró» y vuelve al login
+  en vez de fallar recién al enviar el reporte.
 - La contraseña nunca llega al navegador ni se guarda en `localStorage`.
 - `GET /api/users` exige sesión y devuelve solo nombre, cédula y rol.
 - Las acciones de administración (roles, expulsiones, pasillos, historial)

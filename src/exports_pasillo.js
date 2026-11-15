@@ -106,6 +106,7 @@ async function confirmarYEnviarReporte() {
     const btn = document.getElementById('btn-enviar-sistema');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando Excel...';
+    let sesionExpirada = false;
 
     try {
         const getUnd2 = (name) => { const m = String(name).match(/\*(\d+)/); return m ? parseInt(m[1], 10) : 1; };
@@ -167,6 +168,15 @@ async function confirmarYEnviarReporte() {
             body: formData
         });
 
+        if (response.status === 401) {
+            sesionExpirada = true;
+            mostrarToast('🔒 Tu sesión expiró. Volvé a iniciar sesión.');
+            setTimeout(() => {
+                window.permitirSalida = true; // no frenar la salida con el aviso de "¿seguro?"
+                window.location.href = '/?sesion=expirada';
+            }, 1800);
+            throw new Error('Sesión expirada');
+        }
         if (!response.ok) throw new Error('Error en el servidor: ' + response.status);
 
         mostrarToast('✅ Reporte .xlsx enviado al Sistema');
@@ -174,7 +184,7 @@ async function confirmarYEnviarReporte() {
         document.getElementById('right-drawer').classList.remove('open');
     } catch (error) {
         console.error(error);
-        mostrarToast('❌ Error: ' + (error?.message || String(error)));
+        if (!sesionExpirada) mostrarToast('❌ Error: ' + (error?.message || String(error)));
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane excel-icon" style="font-size: 1.2rem;"></i> Enviar al Sistema';
