@@ -224,6 +224,37 @@ Dos personas en el mismo pasillo ven el mismo producto agregado y no necesitan
 escribirlo dos veces con nombres distintos. Los reportes se comparan sobre la
 misma lista y se evitan filas duplicadas por variantes del nombre.
 
+### 9. Próximo inventario con los productos del último
+
+**Qué se cambió**
+
+- `POST /api/enviar-reporte-xlsx` recibe `pasilloId` y `productosUsados` (JSON)
+  y guarda la lista en `pasillos_config.json` → `ultimoInventario`.
+- La lista se acumula por ronda: varios teléfonos que envían reporte en la
+  misma ronda suman sus productos sin duplicados.
+- `POST /api/cerrar-pasillo` reinicia el acumulador de la ronda, de modo que el
+  próximo inventario arma una lista nueva. `ultimoInventario` se conserva
+  hasta que llegue el primer reporte de la ronda siguiente.
+- `src/state.js` oculta los productos base que no están en `ultimoInventario`
+  (los agregados manualmente se siguen mostrando).
+- `src/ui.js` agrega el aviso «Mostrando X de Y productos del último
+  inventario» y el botón **Ver todos**; las estadísticas y el filtro alfabético
+  cuentan sólo lo visible.
+- Un producto cuenta como usado si tiene cantidad o si la persona lo tocó
+  (aunque el conteo sea 0). El seguimiento vive en `sessionStorage`.
+- El reporte `.xlsx` se genera sólo con los productos visibles, para que los
+  ocultos no se cuelen con conteos viejos.
+
+**Cómo mejora**
+
+Un pasillo de 23 productos donde se trabajaron 20 arranca la próxima ronda con
+esos 20. El resto queda a un toque con **Ver todos**, sin perder el catálogo.
+
+**Operación**
+
+Entre inventarios, el admin debe usar **Cerrar e Inicializar a 0** en el
+pasillo. Esa acción define la ronda y limpia los conteos de los teléfonos.
+
 ---
 
 ## Hallazgos corregidos

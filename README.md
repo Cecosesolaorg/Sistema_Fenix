@@ -170,6 +170,26 @@ recargar la página.
 - Los productos que el admin agrega al catálogo desde el panel aparecen al
   recargar el pasillo.
 
+### Próximo inventario: sólo los productos del último
+
+Al enviar el reporte, el teléfono manda también la lista de productos que se
+trabajaron: los que tienen cantidad y los que se tocaron aunque hayan quedado
+en 0 (producto agotado). El servidor la guarda en
+`registros/pasillos_config.json` dentro de `ultimoInventario`.
+
+La próxima vez que se abra ese pasillo, la lista arranca sólo con esos
+productos. Arriba aparece un aviso con el botón **Ver todos (23)**, que muestra
+el catálogo completo sin borrar nada.
+
+- La lista se comparte entre los teléfonos del pasillo y se arma con la unión
+  de los reportes enviados en la misma ronda.
+- El admin marca el fin de una ronda con **Cerrar e Inicializar a 0**; a partir
+  de ahí los reportes nuevos arman una lista nueva.
+- Los productos agregados manualmente se muestran siempre, aunque no estén en
+  la lista del último inventario.
+- Si la lista guardada no coincide con el catálogo actual, se muestra el
+  pasillo completo para no dejarlo vacío.
+
 ## Seguridad
 
 Estado actual del proyecto:

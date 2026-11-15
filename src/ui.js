@@ -10,6 +10,43 @@ const list = document.getElementById('products-list');
 
 let compareMode = false;
 
+// ─── PRODUCTOS TOCADOS ─────────────────────────────────────────────────
+// Un producto cuenta como "usado" si tiene cantidad o si la persona lo tocó
+// (aunque haya quedado en 0). Así los agotados siguen en el próximo inventario.
+let productosTocados = {};
+try {
+    productosTocados = JSON.parse(sessionStorage.getItem('fenix_' + pasilloId + '_tocados') || '{}') || {};
+} catch (e) {
+    productosTocados = {};
+}
+
+function guardarTocados() {
+    try {
+        sessionStorage.setItem('fenix_' + pasilloId + '_tocados', JSON.stringify(productosTocados));
+    } catch (e) { /* sin almacenamiento: se pierde al recargar */ }
+}
+
+function marcarProductoTocado(code) {
+    if (!code) return;
+    productosTocados[code] = 1;
+    guardarTocados();
+}
+
+window.limpiarProductosTocados = function () {
+    productosTocados = {};
+    guardarTocados();
+};
+
+function productosVisiblesUI() {
+    return (typeof window.productosVisibles === 'function') ? window.productosVisibles() : PRODUCTOS;
+}
+
+window.productosUsadosInventario = function () {
+    return productosVisiblesUI().filter(function (p) {
+        return (Number(conteos[p.code]) || 0) > 0 || productosTocados[p.code];
+    });
+};
+
 
 
 window.toggleComparacion = function () {
@@ -39,10 +76,12 @@ window.toggleComparacion = function () {
 function renderProductos() {
     list.innerHTML = '';
 
+    // Se muestran sólo los productos del último inventario (si hay filtro).
+    let productosARenderizar = productosVisiblesUI();
+
     // Si estamos en modo comparación, filtramos los que tengan algo que comparar
-    let productosARenderizar = PRODUCTOS;
     if (compareMode) {
-        productosARenderizar = PRODUCTOS.filter(p => (conteos[p.code] || 0) > 0 || (p.stockRef || 0) > 0 || (p.existencia || 0) > 0 || (p.stock || 0) > 0);
+        productosARenderizar = productosARenderizar.filter(p => (conteos[p.code] || 0) > 0 || (p.stockRef || 0) > 0 || (p.existencia || 0) > 0 || (p.stock || 0) > 0);
     }
 
     productosARenderizar.forEach(p => {
@@ -126,6 +165,7 @@ function renderProductos() {
 }
 
 function cycleCheckState(code) {
+    marcarProductoTocado(code);
     const current = checkStates[code] || 0;
     const next = (current + 1) % 3;
     checkStates[code] = next;
@@ -143,6 +183,7 @@ function cycleCheckState(code) {
 
 // ─── CAMBIAR CONTEO ─────────────────────────────────────────────────────
 function cambiarConteo(code, delta) {
+    marcarProductoTocado(code);
     conteos[code] = Math.max(0, (conteos[code] || 0) + delta);
     const safeId = code.replace(/\W/g, '_');
     const valEl = document.getElementById('val-' + safeId);
@@ -250,11 +291,12 @@ async function confirmarRenombrar() {
 
 // ─── STATS ─────────────────────────────────────────────────────────────
 function actualizarStats() {
-    const total = PRODUCTOS.length;
-    const contados = PRODUCTOS.filter(p => conteos[p.code] > 0).length;
+    const visibles = productosVisiblesUI();
+    const total = visibles.length;
+    const contados = visibles.filter(p => conteos[p.code] > 0).length;
     const pendientes = total - contados;
     // Total unidades = suma directa de conteos (lo introducido en la calculadora)
-    const totalUnid = PRODUCTOS.reduce((s, p) => {
+    const totalUnid = visibles.reduce((s, p) => {
         const cant = conteos[p.code] || 0;
         return s + cant;
     }, 0);
@@ -286,9 +328,9 @@ function renderAlphaFilterButtons() {
     if (!wrap) return;
     wrap.innerHTML = '';
 
-    // Obtener las letras de los productos que realmente existen en este pasillo
+    // Obtener las letras de los productos que realmente se muestran
     const letrasExistentes = new Set();
-    PRODUCTOS.forEach(p => {
+    productosVisiblesUI().forEach(p => {
         const nombre = (p.name || '').trim();
         if (nombre.length > 0) {
             const primeraLetra = nombre.charAt(0).toUpperCase();
@@ -361,10 +403,11 @@ if (document.getElementById('alpha-filter')) {
 // ─── DRAWER ─────────────────────────────────────────────────────────────
 function abrirDrawer() {
     // Sincronizar stats del drawer
-    const contados = PRODUCTOS.filter(p => conteos[p.code] > 0).length;
-    const pendientes = PRODUCTOS.length - contados;
+    const visibles = productosVisiblesUI();
+    const contados = visibles.filter(p => conteos[p.code] > 0).length;
+    const pendientes = visibles.length - contados;
     // Total unidades = suma directa de conteos (lo introducido en la calculadora)
-    const totalUnid = PRODUCTOS.reduce((s, p) => {
+    const totalUnid = visibles.reduce((s, p) => {
         const cant = conteos[p.code] || 0;
         return s + cant;
     }, 0);
@@ -372,7 +415,7 @@ function abrirDrawer() {
     document.getElementById('d-pendientes').textContent = pendientes;
     document.getElementById('d-unidades').textContent = totalUnid;
     const dTotal = document.getElementById('d-total');
-    if (dTotal) dTotal.textContent = PRODUCTOS.length;
+    if (dTotal) dTotal.textContent = visibles.length;
 
     const sesion = JSON.parse(localStorage.getItem('fenix_pasillo1_sesion') || '{}') || {};
     document.getElementById('d-yo').textContent = (sesion.yo?.nombre || yo.nombre || '—');
@@ -616,6 +659,52 @@ window.abrirCalculadora = function (code) {
         console.error("Calculadora premium no cargó.");
     }
 };
+
+// ─── VER TODOS LOS PRODUCTOS DEL PASILLO ──────────────────────────────
+function actualizarBotonUltimoInventario() {
+    const bar = document.getElementById('ultimo-inventario-bar');
+    if (!bar) return;
+
+    const ocultos = (window.PRODUCTOS_OCULTOS_ULTIMO && window.PRODUCTOS_OCULTOS_ULTIMO.size) || 0;
+    if (!ocultos) {
+        bar.style.display = 'none';
+        return;
+    }
+
+    const total = PRODUCTOS.length;
+    const visibles = total - ocultos;
+    const texto = document.getElementById('ultimo-inventario-texto');
+    const btn = document.getElementById('btn-ver-todos');
+    const mostrandoTodos = window.estaMostrandoOcultos && window.estaMostrandoOcultos();
+
+    bar.style.display = 'flex';
+    if (texto) {
+        texto.textContent = mostrandoTodos
+            ? 'Mostrando los ' + total + ' productos del pasillo'
+            : 'Mostrando ' + visibles + ' de ' + total + ' productos del último inventario';
+    }
+    if (btn) {
+        btn.textContent = mostrandoTodos
+            ? 'Ver solo del último inventario (' + visibles + ')'
+            : 'Ver todos (' + total + ')';
+    }
+}
+
+window.alternarVerTodos = function () {
+    if (typeof window.alternarProductosOcultos !== 'function') return;
+    window.alternarProductosOcultos();
+
+    renderProductos();
+    if (typeof renderAlphaFilterButtons === 'function') renderAlphaFilterButtons();
+    if (typeof aplicarFiltros === 'function') aplicarFiltros();
+    actualizarBotonUltimoInventario();
+
+    mostrarToast(window.estaMostrandoOcultos()
+        ? 'Mostrando todos los productos del pasillo'
+        : 'Mostrando solo los del último inventario');
+};
+
+actualizarBotonUltimoInventario();
 
 // ─── EVITAR SALIDA ACCIDENTAL ───────────────────────────────────────────
 window.addEventListener('beforeunload', function (e) {

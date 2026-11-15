@@ -395,6 +395,94 @@ function registrarHistorial(usuario, accion) {
     } catch (e) { /* el historial nunca debe romper la operación */ }
 }
 
+// ── Último inventario: productos que realmente se trabajaron ────────────────
+// El reporte .xlsx sólo incluye productos con cantidad, así que el cliente
+// manda esa lista al enviar. El servidor la guarda para que el próximo
+// inventario del pasillo arranque sólo con esos productos.
+
+/** Ronda actual del pasillo: el último "Cerrar e inicializar" del admin. */
+function rondaActualPasillo(pasilloId) {
+    try {
+        const cierresPath = path.join(DIRECTORY, 'cierres.json');
+        if (!fs.existsSync(cierresPath)) return '';
+        const cierres = JSON.parse(fs.readFileSync(cierresPath, 'utf8'));
+        return (cierres && cierres[pasilloId]) ? String(cierres[pasilloId]) : '';
+    } catch (e) {
+        return '';
+    }
+}
+
+/** Limpia y valida la lista de productos usados que manda el navegador. */
+function leerProductosUsados(valor) {
+    let lista = valor;
+    if (typeof valor === 'string') {
+        try { lista = JSON.parse(valor); } catch (e) { return []; }
+    }
+    if (!Array.isArray(lista)) return [];
+
+    const salida = [];
+    const vistos = new Set();
+    lista.slice(0, MAX_PRODUCTOS_POR_PASILLO).forEach((item) => {
+        let nombre = '';
+        let code = '';
+        if (typeof item === 'string') {
+            nombre = item;
+        } else if (item && typeof item === 'object') {
+            nombre = item.nombre || item.name || '';
+            code = item.code || item.codigo || '';
+        }
+
+        nombre = validProductName(String(nombre || '').toUpperCase());
+        if (!nombre) return;
+        const clave = normalizarNombreProducto(nombre);
+        if (!clave || vistos.has(clave)) return;
+        vistos.add(clave);
+
+        salida.push({
+            nombre: nombre,
+            code: /^[A-Za-z0-9_-]{1,40}$/.test(String(code || '')) ? String(code) : null
+        });
+    });
+    return salida;
+}
+
+/**
+ * Fusiona los productos usados en la ronda actual y actualiza "ultimoInventario".
+ * Si el admin cerró el pasillo, la ronda cambia y la lista arranca de cero.
+ */
+function registrarInventarioUsado(pasilloId, productos) {
+    if (!Array.isArray(productos) || productos.length === 0) return 0;
+
+    const config = readPasillosConfig();
+    const entrada = config[pasilloId] || { enabled: true, extraProducts: [] };
+    const ronda = rondaActualPasillo(pasilloId);
+
+    const previo = entrada.inventarioAcumulado;
+    const acumulado = (previo && previo.ronda === ronda && Array.isArray(previo.productos))
+        ? previo.productos.slice()
+        : [];
+
+    const conocidos = new Set(acumulado.map((p) => normalizarNombreProducto(p && p.nombre)));
+    productos.forEach((p) => {
+        const clave = normalizarNombreProducto(p.nombre);
+        if (!clave || conocidos.has(clave)) return;
+        conocidos.add(clave);
+        acumulado.push(p);
+    });
+
+    const fecha = new Date().toISOString();
+    entrada.inventarioAcumulado = { ronda: ronda, productos: acumulado };
+    entrada.ultimoInventario = { fecha: fecha, productos: acumulado.slice() };
+    config[pasilloId] = entrada;
+
+    try {
+        writePasillosConfig(config);
+    } catch (e) {
+        return 0; // el reporte no debe fallar por esto
+    }
+    return acumulado.length;
+}
+
 let productsScriptCache = { stamp: '', body: '' };
 
 /** Genera el JS que consume el navegador, inyectando los datos como JSON. */
@@ -1411,6 +1499,16 @@ const requestHandler = (req, res) => {
                 cierres[pasilloId] = nowStr;
                 fs.writeFileSync(cierresPath, JSON.stringify(cierres, null, 4), 'utf8');
 
+                // La próxima ronda arranca con una lista de productos nueva.
+                try {
+                    const config = readPasillosConfig();
+                    const entrada = config[pasilloId];
+                    if (entrada) {
+                        entrada.inventarioAcumulado = { ronda: nowStr, productos: [] };
+                        writePasillosConfig(config);
+                    }
+                } catch (e) { /* no romper el cierre del pasillo */ }
+
                 // Registrar en historial
                 const historialPath = path.join(DIRECTORY, 'historial.json');
                 let historial = [];
@@ -1538,6 +1636,7 @@ const requestHandler = (req, res) => {
                 // Extraer campos y archivo
                 let aisleName = 'Pasillo', responsable = 'Responsable', companero = 'SIN AYUDANTE';
                 let xlsxBuffer = null, originalFileName = 'reporte.xlsx';
+                let pasilloConfigId = '', productosUsadosRaw = '';
 
                 parts.forEach(part => {
                     const nameMatch = part.headers.match(/name="([^"]+)"/);
@@ -1553,6 +1652,8 @@ const requestHandler = (req, res) => {
                         if (fieldName === 'aisleName') aisleName = val;
                         if (fieldName === 'responsable') responsable = val;
                         if (fieldName === 'companero') companero = val;
+                        if (fieldName === 'pasilloId') pasilloConfigId = val;
+                        if (fieldName === 'productosUsados') productosUsadosRaw = part.body.toString('utf8');
                     }
                 });
 
@@ -1571,6 +1672,13 @@ const requestHandler = (req, res) => {
                 if (!isInside(REPORTES_DIR, xlsxPath)) throw new Error('Ruta inválida');
 
                 fs.writeFileSync(xlsxPath, xlsxBuffer);
+
+                // Lista de productos trabajados en esta ronda del pasillo.
+                const pasilloUsado = validPasilloId(pasilloConfigId);
+                if (pasilloUsado) {
+                    const usados = leerProductosUsados(productosUsadosRaw);
+                    if (usados.length) registrarInventarioUsado(pasilloUsado, usados);
+                }
 
                 // Registrar en historial
                 try {

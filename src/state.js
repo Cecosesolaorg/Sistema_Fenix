@@ -113,6 +113,78 @@ let checkStates = JSON.parse(localStorage.getItem(`fenix_${pasilloId}_check`) ||
 let historiales = JSON.parse(localStorage.getItem(`fenix_${pasilloId}_historiales`) || '{}') || {};
 let productoARenombrar = null;
 
+// ─── ÚLTIMO INVENTARIO ────────────────────────────────────────────────
+// El servidor guarda los productos que se trabajaron en el último reporte.
+// Por defecto se muestran sólo esos; el resto queda con el botón "Ver todos".
+let productosOcultosUltimo = new Set();
+let mostrandoProductosOcultos = false;
+
+(function filtrarPorUltimoInventario() {
+    let config = {};
+    try {
+        config = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}') || {};
+    } catch (e) {
+        config = {};
+    }
+
+    const entrada = config[pasilloId] || {};
+    const ultimo = entrada.ultimoInventario;
+    const lista = (ultimo && Array.isArray(ultimo.productos)) ? ultimo.productos : null;
+    if (!lista || lista.length === 0) return;
+
+    const normalizar = window.normalizarProducto || function (n) {
+        return String(n === null || n === undefined ? '' : n).toUpperCase().trim();
+    };
+
+    const codigos = new Set();
+    const nombres = new Set();
+    lista.forEach(function (item) {
+        if (!item) return;
+        if (typeof item === 'string') {
+            const clave = normalizar(item);
+            if (clave) nombres.add(clave);
+            return;
+        }
+        if (item.code) codigos.add(String(item.code));
+        if (item.nombre) {
+            const clave = normalizar(item.nombre);
+            if (clave) nombres.add(clave);
+        }
+    });
+    if (codigos.size === 0 && nombres.size === 0) return;
+
+    let coincidencias = 0;
+    PRODUCTOS.forEach(function (producto) {
+        if (producto.isExtra) return; // los agregados se muestran siempre
+        const coincide = codigos.has(producto.code) || nombres.has(normalizar(producto.name));
+        if (coincide) {
+            coincidencias++;
+            return;
+        }
+        // Si este teléfono ya tiene un conteo, el producto no se oculta.
+        if ((conteos[producto.code] || 0) > 0) return;
+        productosOcultosUltimo.add(producto.code);
+    });
+
+    // Si la lista no coincide con ningún producto (catálogo renombrado, por
+    // ejemplo), es más seguro mostrar todo el pasillo que dejarlo vacío.
+    if (coincidencias === 0) productosOcultosUltimo.clear();
+})();
+
+window.PRODUCTOS_OCULTOS_ULTIMO = productosOcultosUltimo;
+window.hayProductosOcultos = function () { return productosOcultosUltimo.size > 0; };
+window.estaMostrandoOcultos = function () { return mostrandoProductosOcultos; };
+window.alternarProductosOcultos = function () {
+    mostrandoProductosOcultos = !mostrandoProductosOcultos;
+    return mostrandoProductosOcultos;
+};
+window.productosVisibles = function () {
+    if (mostrandoProductosOcultos || productosOcultosUltimo.size === 0) return PRODUCTOS;
+    return PRODUCTOS.filter(function (producto) {
+        return !productosOcultosUltimo.has(producto.code);
+    });
+};
+
 let fallosConexion = 0;
 let isFirstCheck = true;
 let partnerSeleccionado = null;

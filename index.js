@@ -469,11 +469,18 @@ transitionToPasillos = function () {
                         if (locales[i] !== undefined) extras[i] = locales[i];
                     }
 
-                    configFusionada[key] = Object.assign({}, local, remoto, {
+                    const fusion = Object.assign({}, local, remoto, {
                         extraProducts: extras,
                         renamedProducts: Object.assign({}, remoto.renamedProducts || {}, local.renamedProducts || {}),
                         scannedProducts: Object.assign({}, remoto.scannedProducts || {}, local.scannedProducts || {})
                     });
+
+                    // El servidor manda: si no tiene lista del último inventario,
+                    // no se conserva una vieja en este teléfono.
+                    if (!remoto.ultimoInventario) delete fusion.ultimoInventario;
+                    if (!remoto.inventarioAcumulado) delete fusion.inventarioAcumulado;
+
+                    configFusionada[key] = fusion;
                 });
 
                 localStorage.setItem('fenix_pasillos_config', JSON.stringify(configFusionada));

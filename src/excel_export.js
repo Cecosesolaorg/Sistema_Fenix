@@ -290,6 +290,11 @@ window.ExportApp = {
 // Se muestra al exportar un Excel si el admin activó «Pedir opinión».
 window.InventoryCore = window.InventoryCore || {};
 
+// Respaldo: el aviso de productos en rojo no debe romper la descarga.
+window.InventoryCore.showErrorModal = window.InventoryCore.showErrorModal || function (titulo, mensaje) {
+    alert(String(titulo || 'Aviso') + '\n\n' + String(mensaje || ''));
+};
+
 window.InventoryCore.showFeedbackModal = function (pasillo, usuario) {
     if (document.getElementById('fenix-feedback-overlay')) return;
     // Una sola vez por sesión de pasillo: descargar y enviar no preguntan dos veces.

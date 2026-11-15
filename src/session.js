@@ -49,6 +49,7 @@ async function verificarCierreServidor() {
                 localStorage.setItem(`fenix_${pasilloId}_historiales`, JSON.stringify(historiales));
                 localStorage.setItem(`fenix_${pasilloId}_check`, JSON.stringify(checkStates));
                 localStorage.setItem(`fenix_${pasilloId}_last_clear_check`, String(lastClosedTime));
+                if (typeof window.limpiarProductosTocados === 'function') window.limpiarProductosTocados();
 
                 renderProductos();
 

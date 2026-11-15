@@ -110,9 +110,12 @@ async function confirmarYEnviarReporte() {
     try {
         const getUnd2 = (name) => { const m = String(name).match(/\*(\d+)/); return m ? parseInt(m[1], 10) : 1; };
         const getDisplayName = (p) => p.isExtra ? `${p.name} (NEW)` : p.name;
-        const products = PRODUCTOS.map(p => getDisplayName(p));
+        // Sólo se reporta lo visible: los productos ocultos por el último
+        // inventario no forman parte de esta ronda.
+        const productosReporte = (window.productosVisibles ? window.productosVisibles() : PRODUCTOS);
+        const products = productosReporte.map(p => getDisplayName(p));
         const inventoryData = {};
-        PRODUCTOS.forEach(p => {
+        productosReporte.forEach(p => {
             const qty = conteos[p.code] || 0;
             const und = getUnd2(p.name);
             inventoryData[getDisplayName(p)] = {
@@ -146,10 +149,18 @@ async function confirmarYEnviarReporte() {
         formData.append('file', new Blob([result.buffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }), finalFileName);
+        // Productos que se trabajaron en esta ronda: cantidad o tocados.
+        const usados = (window.productosUsadosInventario
+            ? window.productosUsadosInventario()
+            : PRODUCTOS.filter(p => (conteos[p.code] || 0) > 0))
+            .map(p => ({ code: p.code, nombre: p.name }));
+
         formData.append('aisleName', cleanPasilloName.toUpperCase());
         formData.append('responsable', resp);
         formData.append('companero', comp);
         formData.append('ayudante', comp);
+        formData.append('pasilloId', pasilloId);
+        formData.append('productosUsados', JSON.stringify(usados));
 
         const response = await fetch('/api/enviar-reporte-xlsx', {
             method: 'POST',
@@ -231,6 +242,7 @@ function confirmarLimpiarConteo() {
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(`fenix_${pasilloId}_check`);
     localStorage.removeItem(`fenix_${pasilloId}_historiales`);
+    if (typeof window.limpiarProductosTocados === 'function') window.limpiarProductosTocados();
     actualizarStats();
     mostrarToast('✅ Conteos y checklist limpiados');
 }

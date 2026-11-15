@@ -112,6 +112,11 @@
             config[pasilloId].extraProducts = fusion;
             if (cfg.enabled !== undefined) config[pasilloId].enabled = cfg.enabled;
             if (cfg.name && !config[pasilloId].name) config[pasilloId].name = cfg.name;
+            if (cfg.ultimoInventario) {
+                config[pasilloId].ultimoInventario = cfg.ultimoInventario;
+            } else {
+                delete config[pasilloId].ultimoInventario;
+            }
             guardarConfig(config);
 
             if (cambio) {
