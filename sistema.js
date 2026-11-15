@@ -543,6 +543,151 @@ async function descargarComparacionExcel() {
     saveAs(new Blob([buffer]), `Comparacion_Inventarios.xlsx`);
 }
 
+
+// ─── IMPRIMIR LOS DOS INVENTARIOS EN UNA SOLA HOJA ─────────────────────
+function imprimirComparacion() {
+    if (!window.currentCompareData) {
+        mostrarToastSistema('⚠️ No hay datos para imprimir');
+        return;
+    }
+
+    const data = window.currentCompareData;
+    const repA = data.repA.info || {};
+    const repB = data.repB.info || {};
+    const nombreA = repA.responsable || repA.usuario || 'Reporte A';
+    const nombreB = repB.responsable || repB.usuario || 'Reporte B';
+    const pasilloA = repA.aisleName || repA.folderName || '';
+    const pasilloB = repB.aisleName || repB.folderName || '';
+    const pasillo = (!pasilloB || pasilloA === pasilloB)
+        ? (pasilloA || pasilloB || 'Inventario')
+        : `${pasilloA} / ${pasilloB}`;
+    const fechaA = data.repA.date instanceof Date && !isNaN(data.repA.date) ? data.repA.date.toLocaleString() : 'Sin fecha';
+    const fechaB = data.repB.date instanceof Date && !isNaN(data.repB.date) ? data.repB.date.toLocaleString() : 'Sin fecha';
+
+    let sumA = 0;
+    let sumB = 0;
+    let sumDiff = 0;
+    const filas = data.products.map(function (p, i) {
+        const qA = data.dataA[p] || 0;
+        const qB = data.dataB[p] || 0;
+        const diff = qB - qA;
+        sumA += qA;
+        sumB += qB;
+        sumDiff += diff;
+        const clase = diff > 0 ? 'pos' : (diff < 0 ? 'neg' : '');
+        const signo = diff > 0 ? '+' : '';
+        return `<tr>
+            <td class="prod">${i + 1}. ${esc(p)}</td>
+            <td class="num">${qA}</td>
+            <td class="num">${qB}</td>
+            <td class="num ${clase}">${signo}${diff}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inventarios ${esc(pasillo)}</title>
+<style>
+    @page { size: A4 portrait; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 9px; margin: 0; }
+    h1 { font-size: 13px; margin: 0; text-align: center; letter-spacing: .3px; }
+    .sub { text-align: center; font-size: 9px; margin: 2px 0 6px; font-weight: bold; text-transform: uppercase; }
+    .meta { display: flex; gap: 6px; margin-bottom: 6px; }
+    .meta > div { flex: 1; border: 1px solid #444; padding: 3px 5px; }
+    .meta span { display: block; font-size: 7px; text-transform: uppercase; color: #444; }
+    .meta strong { display: block; font-size: 9px; }
+    .meta em { display: block; font-size: 8px; font-style: normal; color: #222; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { display: table-header-group; }
+    th, td { border: 1px solid #777; padding: 2px 4px; }
+    th { background: #e6e6e6; font-size: 8px; text-transform: uppercase; }
+    td.prod { text-align: left; }
+    td.num, th.num { text-align: center; width: 13%; }
+    tbody tr:nth-child(even) td { background: #f7f7f7; }
+    tbody tr { page-break-inside: avoid; }
+    td.pos, td.neg { font-weight: bold; }
+    .tot td { font-weight: bold; background: #dcdcdc !important; border-top: 2px solid #333; }
+    .nota { font-size: 7px; color: #444; margin-top: 6px; }
+</style>
+</head>
+<body>
+    <h1>INVENTARIO CECOSESOLA · J-085030140</h1>
+    <p class="sub">${esc(pasillo.toUpperCase())} — Dos inventarios en una hoja</p>
+
+    <div class="meta">
+        <div>
+            <span>Reporte A (anterior)</span>
+            <strong>${esc(fechaA)}</strong>
+            <em>${esc(nombreA)}</em>
+        </div>
+        <div>
+            <span>Reporte B (reciente)</span>
+            <strong>${esc(fechaB)}</strong>
+            <em>${esc(nombreB)}</em>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align:left;">Producto</th>
+                <th class="num">Cant. A</th>
+                <th class="num">Cant. B</th>
+                <th class="num">Diferencia (B - A)</th>
+            </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+        <tfoot>
+            <tr class="tot">
+                <td>TOTAL (${data.products.length} productos)</td>
+                <td class="num">${sumA}</td>
+                <td class="num">${sumB}</td>
+                <td class="num">${sumDiff > 0 ? '+' : ''}${sumDiff}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <p class="nota">
+        Reporte A = más antiguo; Reporte B = más reciente. La diferencia positiva significa que aumentó en B.
+        Generado por Inventario Fénix · ${esc(new Date().toLocaleString())}.
+    </p>
+</body>
+</html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:600px;border:0;';
+    document.body.appendChild(iframe);
+
+    const win = iframe.contentWindow;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+
+    let limpiado = false;
+    const limpiar = function () {
+        if (limpiado) return;
+        limpiado = true;
+        try { iframe.remove(); } catch (e) { }
+    };
+    win.onafterprint = limpiar;
+
+    setTimeout(function () {
+        try {
+            win.focus();
+            win.print();
+        } catch (e) {
+            console.error(e);
+            mostrarToastSistema('❌ No se pudo abrir la impresión');
+            limpiar();
+        }
+        setTimeout(limpiar, 60000);
+    }, 350);
+}
+
 async function generarExcelReporte(index) {
     const rep = cachedReportes[index];
     if (!rep) return;

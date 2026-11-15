@@ -190,6 +190,16 @@ el catálogo completo sin borrar nada.
 - Si la lista guardada no coincide con el catálogo actual, se muestra el
   pasillo completo para no dejarlo vacío.
 
+### Reportes y comparación
+
+- El `.xlsx` que se descarga o se envía al sistema muestra **FECHA**,
+  **COMPAÑERO** y **PRODUCTOS CONTADOS**. Ya no repite el responsable.
+- En **Reportes**, al marcar dos archivos se abre la comparación producto por
+  producto, con las cantidades A/B y la diferencia.
+- **Imprimir / PDF** arma una hoja A4 con los dos inventarios completos lado a
+  lado, los totales y la diferencia, lista para imprimir o guardar como PDF.
+- **Exportar Comparación** sigue generando el `.xlsx` de la comparación.
+
 ## Seguridad
 
 Estado actual del proyecto:

@@ -164,10 +164,14 @@ window.ExportApp = {
             // Calculate total counted before meta
             const totalCounted = Object.values(inventoryData).filter(d => parseFloat(d.qty || 0) > 0).length;
 
+            // En el encabezado va sólo el compañero: el responsable ya está
+            // en el nombre del archivo y en la sesión del teléfono.
+            const companeroVisible = (companero && String(companero).trim() !== '')
+                ? String(companero).trim()
+                : (selectedPartner || 'SIN COMPAÑERO');
             const meta = [
                 ["FECHA", new Date().toLocaleDateString()],
-                ["RESPONSABLE", responsable.toUpperCase()],
-                ["COMPAÑERO", pName.toUpperCase()]
+                ["COMPAÑERO", companeroVisible.toUpperCase()]
             ];
 
             if (ayudante && ayudante !== "SIN AYUDA" && ayudante.trim() !== "") {
