@@ -196,8 +196,10 @@ el catálogo completo sin borrar nada.
   **COMPAÑERO** y **PRODUCTOS CONTADOS**. Ya no repite el responsable.
 - En **Reportes**, al marcar dos archivos se abre la comparación producto por
   producto, con las cantidades A/B y la diferencia.
-- **Imprimir / PDF** arma una hoja A4 con los dos inventarios completos lado a
-  lado, los totales y la diferencia, lista para imprimir o guardar como PDF.
+- **Imprimir / PDF** arma una hoja A4 horizontal con tres bloques: el
+  Reporte A completo, el Reporte B completo y la comparación con la
+  diferencia. Todo junto en el mismo documento, listo para imprimir o guardar
+  como PDF.
 - **Exportar Comparación** sigue generando el `.xlsx` de la comparación.
 
 ## Seguridad

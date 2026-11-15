@@ -312,10 +312,11 @@ una sesión vence de verdad, la persona se entera antes de cargar el pasillo.
   **COMPAÑERO** y **PRODUCTOS CONTADOS**. Se quitó la fila **RESPONSABLE**; el
   nombre del archivo y el envío al servidor no cambiaron.
 - En la comparación de dos reportes se agregó **Imprimir / PDF**: genera una
-  hoja A4 con los dos inventarios completos lado a lado, la diferencia
-  (B - A) y los totales. Sirve para imprimir o guardar como PDF desde el
+  hoja A4 horizontal con tres bloques separados en la misma hoja: Reporte A
+  completo (producto, historial y total), Reporte B completo y la comparación
+  con la diferencia (B - A). Sirve para imprimir o guardar como PDF desde el
   navegador.
-- La hoja de impresión repite la cabecera de la tabla en cada página, evita
+- La hoja de impresión repite la cabecera de cada tabla en cada página, evita
   cortar filas y usa letra compacta para que entren pasillos grandes.
 - **Exportar Comparación** se mantiene igual.
 

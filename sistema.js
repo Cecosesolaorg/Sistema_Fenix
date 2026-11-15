@@ -544,8 +544,104 @@ async function descargarComparacionExcel() {
 }
 
 
-// ─── IMPRIMIR LOS DOS INVENTARIOS EN UNA SOLA HOJA ─────────────────────
-function imprimirComparacion() {
+// ─── DATOS COMPLETOS DE UN REPORTE PARA IMPRIMIR ───────────────────────
+function textoCeldaExcel(valor) {
+    if (valor === null || valor === undefined) return '';
+    if (typeof valor === 'object') {
+        if (Array.isArray(valor.richText)) return valor.richText.map(function (t) { return t.text || ''; }).join('');
+        if (valor.text !== undefined) return String(valor.text);
+        if (valor.result !== undefined) return String(valor.result);
+    }
+    return String(valor);
+}
+
+async function parseReporteCompleto(rep) {
+    const salida = { filas: [], meta: {} };
+
+    if (rep.type === 'xlsx') {
+        const response = await fetch('/api/descargar-reporte/' + encodeURIComponent(rep.filename));
+        if (!response.ok) throw new Error('No se pudo leer ' + rep.filename);
+
+        const arrayBuffer = await response.arrayBuffer();
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(arrayBuffer);
+        const ws = wb.getWorksheet(1);
+
+        // Metadatos del encabezado (filas 3 a 8)
+        for (let r = 3; r <= 8; r++) {
+            const fila = ws.getRow(r);
+            const etiqueta = textoCeldaExcel(fila.getCell(1).value).trim().toUpperCase();
+            const valor = textoCeldaExcel(fila.getCell(2).value).trim();
+            if (!etiqueta) continue;
+            if (etiqueta === 'FECHA') salida.meta.fecha = valor;
+            else if (etiqueta === 'COMPAÑERO') salida.meta.companero = valor;
+            else if (etiqueta === 'RESPONSABLE') salida.meta.responsable = valor;
+            else if (etiqueta === 'AYUDANTE') salida.meta.ayudante = valor;
+            else if (etiqueta.indexOf('PRODUCTOS') === 0) salida.meta.productos = valor;
+        }
+
+        // Filas de productos (la tabla empieza en la fila 10)
+        ws.eachRow(function (row, rowNumber) {
+            if (rowNumber < 10) return;
+            const nombre = textoCeldaExcel(row.getCell(1).value).trim();
+            if (!nombre) return;
+            salida.filas.push({
+                producto: nombre,
+                historial: textoCeldaExcel(row.getCell(2).value).trim(),
+                total: Number(textoCeldaExcel(row.getCell(3).value)) || 0
+            });
+        });
+    } else {
+        const mapa = await parseReporteParaComparar(rep);
+        salida.filas = Object.keys(mapa)
+            .sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: 'base' }); })
+            .map(function (p) { return { producto: p, historial: '—', total: mapa[p] }; });
+        salida.meta.fecha = rep.fecha_iso || rep.fecha || '';
+        salida.meta.companero = rep.companero || '';
+        salida.meta.responsable = rep.responsable || rep.usuario || '';
+        salida.meta.productos = salida.filas.length;
+    }
+
+    return salida;
+}
+
+function fichaReporte(full) {
+    const partes = [];
+    if (full.meta.fecha) partes.push('FECHA: ' + full.meta.fecha);
+    let quien = String(full.meta.companero || '').trim();
+    if (!quien || quien === '---' || quien === 'SIN AYUDA') quien = 'SIN COMPAÑERO';
+    partes.push('COMPAÑERO: ' + quien);
+    const cuantos = full.meta.productos || full.filas.length;
+    if (cuantos) partes.push('PRODUCTOS: ' + cuantos);
+    return partes.map(esc).join(' · ');
+}
+
+function tablaReporteCompleto(full) {
+    if (!full.filas.length) {
+        return '<table class="reporte"><colgroup><col style="width:64%"><col style="width:16%"><col style="width:20%"></colgroup>' +
+            '<thead><tr><th>Producto</th><th class="num">Hist.</th><th class="num">Total</th></tr></thead>' +
+            '<tbody><tr><td colspan="3" class="vacio">Sin productos</td></tr></tbody></table>';
+    }
+    let totalUnd = 0;
+    const filas = full.filas.map(function (f, i) {
+        totalUnd += f.total;
+        return `<tr>
+            <td class="prod">${i + 1}. ${esc(f.producto)}</td>
+            <td class="num">${esc(f.historial) || '—'}</td>
+            <td class="num">${f.total}</td>
+        </tr>`;
+    }).join('');
+
+    return `<table class="reporte">
+        <colgroup><col style="width:64%"><col style="width:16%"><col style="width:20%"></colgroup>
+        <thead><tr><th>Producto</th><th class="num">Hist.</th><th class="num">Total</th></tr></thead>
+        <tbody>${filas}</tbody>
+        <tfoot><tr><td>TOTAL (${full.filas.length} prod.)</td><td></td><td class="num">${totalUnd}</td></tr></tfoot>
+    </table>`;
+}
+
+// ─── IMPRIMIR COMPARACIÓN + LOS DOS INVENTARIOS EN UNA HOJA ─────────────
+async function imprimirComparacion() {
     if (!window.currentCompareData) {
         mostrarToastSistema('⚠️ No hay datos para imprimir');
         return;
@@ -554,20 +650,42 @@ function imprimirComparacion() {
     const data = window.currentCompareData;
     const repA = data.repA.info || {};
     const repB = data.repB.info || {};
-    const nombreA = repA.responsable || repA.usuario || 'Reporte A';
-    const nombreB = repB.responsable || repB.usuario || 'Reporte B';
     const pasilloA = repA.aisleName || repA.folderName || '';
     const pasilloB = repB.aisleName || repB.folderName || '';
     const pasillo = (!pasilloB || pasilloA === pasilloB)
         ? (pasilloA || pasilloB || 'Inventario')
         : `${pasilloA} / ${pasilloB}`;
-    const fechaA = data.repA.date instanceof Date && !isNaN(data.repA.date) ? data.repA.date.toLocaleString() : 'Sin fecha';
-    const fechaB = data.repB.date instanceof Date && !isNaN(data.repB.date) ? data.repB.date.toLocaleString() : 'Sin fecha';
+
+    // Leer los dos archivos completos (producto, historial y total).
+    let fullA = { filas: [], meta: {} };
+    let fullB = { filas: [], meta: {} };
+    try {
+        const leidos = await Promise.all([
+            parseReporteCompleto(repA),
+            parseReporteCompleto(repB)
+        ]);
+        fullA = leidos[0];
+        fullB = leidos[1];
+    } catch (e) {
+        console.error('No se pudieron leer los reportes completos:', e);
+    }
+
+    // Respaldo con los datos de la comparación si un archivo no se pudo abrir.
+    if (!fullA.filas.length) {
+        fullA.filas = data.products
+            .filter(function (p) { return (data.dataA[p] || 0) > 0; })
+            .map(function (p) { return { producto: p, historial: '—', total: data.dataA[p] || 0 }; });
+    }
+    if (!fullB.filas.length) {
+        fullB.filas = data.products
+            .filter(function (p) { return (data.dataB[p] || 0) > 0; })
+            .map(function (p) { return { producto: p, historial: '—', total: data.dataB[p] || 0 }; });
+    }
 
     let sumA = 0;
     let sumB = 0;
     let sumDiff = 0;
-    const filas = data.products.map(function (p, i) {
+    const filasComparacion = data.products.map(function (p, i) {
         const qA = data.dataA[p] || 0;
         const qB = data.dataB[p] || 0;
         const diff = qB - qA;
@@ -590,65 +708,58 @@ function imprimirComparacion() {
 <meta charset="utf-8">
 <title>Inventarios ${esc(pasillo)}</title>
 <style>
-    @page { size: A4 portrait; margin: 8mm; }
+    @page { size: A4 landscape; margin: 6mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 9px; margin: 0; }
-    h1 { font-size: 13px; margin: 0; text-align: center; letter-spacing: .3px; }
-    .sub { text-align: center; font-size: 9px; margin: 2px 0 6px; font-weight: bold; text-transform: uppercase; }
-    .meta { display: flex; gap: 6px; margin-bottom: 6px; }
-    .meta > div { flex: 1; border: 1px solid #444; padding: 3px 5px; }
-    .meta span { display: block; font-size: 7px; text-transform: uppercase; color: #444; }
-    .meta strong { display: block; font-size: 9px; }
-    .meta em { display: block; font-size: 8px; font-style: normal; color: #222; word-break: break-word; }
-    table { width: 100%; border-collapse: collapse; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 8px; margin: 0; }
+    h1 { font-size: 12px; margin: 0; text-align: center; letter-spacing: .3px; }
+    .sub { text-align: center; font-size: 8px; margin: 2px 0 5px; font-weight: bold; text-transform: uppercase; }
+    .triple { display: flex; gap: 5px; align-items: flex-start; }
+    .bloque { flex: 1; min-width: 0; border: 1px solid #555; padding: 3px; }
+    .bloque.comp { flex: 1.45; }
+    .bloque h2 { font-size: 7.5px; margin: 0 0 2px; text-transform: uppercase; background: #dcdcdc; padding: 2px 3px; border: 1px solid #777; }
+    .bloque.comp h2 { background: #cfd8dc; }
+    .ficha { font-size: 6.5px; margin: 0 0 3px; color: #333; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { display: table-header-group; }
-    th, td { border: 1px solid #777; padding: 2px 4px; }
-    th { background: #e6e6e6; font-size: 8px; text-transform: uppercase; }
-    td.prod { text-align: left; }
-    td.num, th.num { text-align: center; width: 13%; }
-    tbody tr:nth-child(even) td { background: #f7f7f7; }
+    th, td { border: 1px solid #888; padding: 1px 2px; font-size: 7px; vertical-align: top; }
+    th { background: #e8e8e8; font-size: 6.5px; text-transform: uppercase; }
+    td.prod { text-align: left; word-break: break-word; }
+    td.num, th.num { text-align: center; white-space: nowrap; }
     tbody tr { page-break-inside: avoid; }
+    tfoot td { font-weight: bold; background: #e0e0e0; }
+    .vacio { text-align: center; color: #777; }
     td.pos, td.neg { font-weight: bold; }
-    .tot td { font-weight: bold; background: #dcdcdc !important; border-top: 2px solid #333; }
-    .nota { font-size: 7px; color: #444; margin-top: 6px; }
+    .nota { font-size: 6.5px; color: #444; margin-top: 5px; }
 </style>
 </head>
 <body>
     <h1>INVENTARIO CECOSESOLA · J-085030140</h1>
-    <p class="sub">${esc(pasillo.toUpperCase())} — Dos inventarios en una hoja</p>
+    <p class="sub">${esc(pasillo.toUpperCase())} — Comparación y dos inventarios</p>
 
-    <div class="meta">
-        <div>
-            <span>Reporte A (anterior)</span>
-            <strong>${esc(fechaA)}</strong>
-            <em>${esc(nombreA)}</em>
-        </div>
-        <div>
-            <span>Reporte B (reciente)</span>
-            <strong>${esc(fechaB)}</strong>
-            <em>${esc(nombreB)}</em>
-        </div>
+    <div class="triple">
+        <section class="bloque">
+            <h2>Reporte A · Anterior</h2>
+            <p class="ficha">${fichaReporte(fullA)}</p>
+            ${tablaReporteCompleto(fullA)}
+        </section>
+
+        <section class="bloque">
+            <h2>Reporte B · Reciente</h2>
+            <p class="ficha">${fichaReporte(fullB)}</p>
+            ${tablaReporteCompleto(fullB)}
+        </section>
+
+        <section class="bloque comp">
+            <h2>Comparación · B - A</h2>
+            <p class="ficha">${data.products.length} productos · Diferencia total: ${sumDiff > 0 ? '+' : ''}${sumDiff}</p>
+            <table class="comparacion">
+                <colgroup><col style="width:56%"><col style="width:13%"><col style="width:13%"><col style="width:18%"></colgroup>
+                <thead><tr><th>Producto</th><th class="num">A</th><th class="num">B</th><th class="num">Dif.</th></tr></thead>
+                <tbody>${filasComparacion || '<tr><td colspan="4" class="vacio">Sin productos</td></tr>'}</tbody>
+                <tfoot><tr><td>TOTAL</td><td class="num">${sumA}</td><td class="num">${sumB}</td><td class="num">${sumDiff > 0 ? '+' : ''}${sumDiff}</td></tr></tfoot>
+            </table>
+        </section>
     </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th style="text-align:left;">Producto</th>
-                <th class="num">Cant. A</th>
-                <th class="num">Cant. B</th>
-                <th class="num">Diferencia (B - A)</th>
-            </tr>
-        </thead>
-        <tbody>${filas}</tbody>
-        <tfoot>
-            <tr class="tot">
-                <td>TOTAL (${data.products.length} productos)</td>
-                <td class="num">${sumA}</td>
-                <td class="num">${sumB}</td>
-                <td class="num">${sumDiff > 0 ? '+' : ''}${sumDiff}</td>
-            </tr>
-        </tfoot>
-    </table>
 
     <p class="nota">
         Reporte A = más antiguo; Reporte B = más reciente. La diferencia positiva significa que aumentó en B.
