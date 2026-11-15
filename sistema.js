@@ -708,28 +708,28 @@ async function imprimirComparacion() {
 <meta charset="utf-8">
 <title>Inventarios ${esc(pasillo)}</title>
 <style>
-    @page { size: A4 landscape; margin: 6mm; }
+    @page { size: A4 portrait; margin: 8mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 8px; margin: 0; }
-    h1 { font-size: 12px; margin: 0; text-align: center; letter-spacing: .3px; }
-    .sub { text-align: center; font-size: 8px; margin: 2px 0 5px; font-weight: bold; text-transform: uppercase; }
-    .triple { display: flex; gap: 5px; align-items: flex-start; }
-    .bloque { flex: 1; min-width: 0; border: 1px solid #555; padding: 3px; }
-    .bloque.comp { flex: 1.45; }
-    .bloque h2 { font-size: 7.5px; margin: 0 0 2px; text-transform: uppercase; background: #dcdcdc; padding: 2px 3px; border: 1px solid #777; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 8.5px; margin: 0; }
+    h1 { font-size: 13px; margin: 0; text-align: center; letter-spacing: .3px; }
+    .sub { text-align: center; font-size: 9px; margin: 2px 0 7px; font-weight: bold; text-transform: uppercase; }
+    .triple { display: block; }
+    .bloque { width: 100%; border: 1px solid #555; padding: 4px; margin-bottom: 7px; page-break-inside: auto; }
+    .bloque:last-child { margin-bottom: 0; }
+    .bloque h2 { font-size: 9px; margin: 0 0 2px; text-transform: uppercase; background: #dcdcdc; padding: 3px 4px; border: 1px solid #777; page-break-after: avoid; }
     .bloque.comp h2 { background: #cfd8dc; }
-    .ficha { font-size: 6.5px; margin: 0 0 3px; color: #333; word-break: break-word; }
+    .ficha { font-size: 7.5px; margin: 0 0 4px; color: #333; word-break: break-word; page-break-after: avoid; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { display: table-header-group; }
-    th, td { border: 1px solid #888; padding: 1px 2px; font-size: 7px; vertical-align: top; }
-    th { background: #e8e8e8; font-size: 6.5px; text-transform: uppercase; }
+    th, td { border: 1px solid #888; padding: 2px 4px; font-size: 8px; vertical-align: top; }
+    th { background: #e8e8e8; font-size: 7.5px; text-transform: uppercase; }
     td.prod { text-align: left; word-break: break-word; }
     td.num, th.num { text-align: center; white-space: nowrap; }
     tbody tr { page-break-inside: avoid; }
     tfoot td { font-weight: bold; background: #e0e0e0; }
     .vacio { text-align: center; color: #777; }
     td.pos, td.neg { font-weight: bold; }
-    .nota { font-size: 6.5px; color: #444; margin-top: 5px; }
+    .nota { font-size: 7px; color: #444; margin-top: 6px; }
 </style>
 </head>
 <body>
