@@ -921,102 +921,6 @@
             font-size: 1.3rem;
         }
 
-        /* ── CUADRE CHECKLIST ── */
-        .checklist-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 4px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.85rem;
-            color: var(--text);
-        }
-
-        .checklist-item:last-child {
-            border-bottom: none;
-        }
-
-        .checklist-item input[type="checkbox"] {
-            appearance: none;
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--border);
-            border-radius: 6px;
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: all 0.2s;
-            background: white;
-            position: relative;
-        }
-
-        .checklist-item input[type="checkbox"]:checked {
-            background: #27ae60;
-            border-color: #27ae60;
-        }
-
-        .checklist-item input[type="checkbox"]:checked::after {
-            content: '\2713';
-            position: absolute;
-            color: white;
-            font-size: 13px;
-            font-weight: 800;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        .checklist-item label {
-            flex: 1;
-            cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1.3;
-        }
-
-        .checklist-item input[type="checkbox"]:checked+label {
-            text-decoration: line-through;
-            color: var(--muted);
-        }
-
-        .checklist-progress-bar {
-            height: 6px;
-            background: var(--border);
-            border-radius: 99px;
-            overflow: hidden;
-            margin-top: 10px;
-            margin-bottom: 4px;
-        }
-
-        .checklist-progress-fill {
-            height: 100%;
-            border-radius: 99px;
-            background: linear-gradient(90deg, #27ae60, #2ecc71);
-            transition: width 0.4s ease;
-        }
-
-        .checklist-progress-text {
-            font-size: 0.72rem;
-            color: var(--muted);
-            text-align: right;
-        }
-
-        .checklist-reset-btn {
-            background: none;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--muted);
-            font-size: 0.75rem;
-            cursor: pointer;
-            padding: 4px 10px;
-            transition: all 0.2s;
-            margin-top: 8px;
-            width: 100%;
-        }
-
-        .checklist-reset-btn:hover {
-            border-color: var(--red);
-            color: var(--red);
-        }
     </style>
     <!-- ExcelJS + FileSaver desde CDN -->
     <script src="src/vendor/exceljs.min.js"></script>
@@ -1106,33 +1010,6 @@
                     Limpiar
                 </button>
             </div>
-        </div>
-    </div>
-
-    <!-- CONFIRM ENVIRONMENT MODAL -->
-    <div class="partner-overlay hidden" id="modal-confirmar-envio" style="display: none; z-index: 2000;">
-        <div class="partner-card" style="padding: 24px 20px;">
-            <h2 style="color: var(--yellow); font-size: 1.2rem; text-transform: uppercase; margin-bottom: 4px;"><i
-                    class="fa-solid fa-paper-plane"></i> POR FAVOR INGRESA EL NOMBRE DEL COMPAÑERO CON EL QUE REALIZASTE
-                EL
-                INVENTARIO</h2>
-            <p class="sub" style="margin-bottom: 16px; color: var(--muted); font-size: 0.9rem;"> (DEJALO VACÍO SI
-                FUE SOLO)</p>
-
-            <div style="margin-bottom: 20px;">
-                <input type="text" id="input-companero-envio" placeholder="NOMBRE DE TU COMPAÑERO..."
-                    style="width: 100%; padding: 14px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; color: white; font-family: inherit; font-size: 1rem; outline: none; margin-bottom: 16px;"
-                    autocomplete="off" />
-                <button onclick="confirmarYEnviarReporte()"
-                    style="width: 100%; background: #00bcd4; border: none; color: white; padding: 14px; border-radius: 12px; font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s;">
-                    ENVIAR EL INVENTARIO
-                </button>
-            </div>
-
-            <button onclick="cerrarModalConfirmarEnvio()"
-                style="width: 100%; background: #cbd5e1; color: #0f172a; border: none; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.2s;">
-                CANCELAR
-            </button>
         </div>
     </div>
 
@@ -1297,46 +1174,6 @@
             </div>
         </div>
 
-        <!-- CUADRE CHECKLIST -->
-        <div class="drawer-section">
-            <p class="drawer-section-title"><i class="fa-solid fa-clipboard-check"
-                    style="margin-right:5px;color:#27ae60;"></i>Cuadre</p>
-
-            <!-- Barra de progreso -->
-            <div class="checklist-progress-bar">
-                <div class="checklist-progress-fill" id="cuadre-progress-fill" style="width:0%"></div>
-            </div>
-            <p class="checklist-progress-text" id="cuadre-progress-text">0 / 0 listo</p>
-
-            <!-- Items del checklist -->
-            <div id="cuadre-checklist-items">
-                <div class="checklist-item">
-                    <input type="checkbox" id="chk-1" onchange="actualizarCuadre()">
-                    <label for="chk-1">Contar todos los productos</label>
-                </div>
-                <div class="checklist-item">
-                    <input type="checkbox" id="chk-2" onchange="actualizarCuadre()">
-                    <label for="chk-2">Verificar productos manuales</label>
-                </div>
-                <div class="checklist-item">
-                    <input type="checkbox" id="chk-3" onchange="actualizarCuadre()">
-                    <label for="chk-3">Revisar pendientes en 0</label>
-                </div>
-                <div class="checklist-item">
-                    <input type="checkbox" id="chk-4" onchange="actualizarCuadre()">
-                    <label for="chk-4">Cuadre con Depósito</label>
-                </div>
-                <div class="checklist-item">
-                    <input type="checkbox" id="chk-5" onchange="actualizarCuadre()">
-                    <label for="chk-5">Enviar reporte al sistema</label>
-                </div>
-            </div>
-
-            <button class="checklist-reset-btn" onclick="resetearCuadre()">
-                <i class="fa-solid fa-rotate-left"></i> Resetear cuadre
-            </button>
-        </div>
-
         <!-- Export -->
         <div style="display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-excel" id="btn-enviar-sistema" onclick="enviarReporte()"
@@ -1387,49 +1224,7 @@
     <script src="src/productos_sync.js?v=1"></script>
 
     <script src="src/session.js?v=1.2"></script>
-    <script src="src/exports_pasillo.js?v=1.3"></script>
-    <script>
-        // ─── CUADRE CHECKLIST ─── //
-        const CUADRE_KEY = 'cuadre_checklist_' + (new URLSearchParams(location.search).get('pasillo') || 'default');
-        const TOTAL_CHECKS = 5;
-
-        function cargarCuadre() {
-            const guardado = JSON.parse(localStorage.getItem(CUADRE_KEY) || '{}');
-            for (let i = 1; i <= TOTAL_CHECKS; i++) {
-                const el = document.getElementById('chk-' + i);
-                if (el) el.checked = !!guardado[i];
-            }
-            actualizarCuadre();
-        }
-
-        function actualizarCuadre() {
-            const guardado = {};
-            let checked = 0;
-            for (let i = 1; i <= TOTAL_CHECKS; i++) {
-                const el = document.getElementById('chk-' + i);
-                if (el && el.checked) { checked++; guardado[i] = true; }
-            }
-            localStorage.setItem(CUADRE_KEY, JSON.stringify(guardado));
-            const pct = TOTAL_CHECKS > 0 ? Math.round((checked / TOTAL_CHECKS) * 100) : 0;
-            const fill = document.getElementById('cuadre-progress-fill');
-            const txt = document.getElementById('cuadre-progress-text');
-            if (fill) fill.style.width = pct + '%';
-            if (fill) fill.style.background = pct === 100 ? '#27ae60' : 'linear-gradient(90deg, #27ae60, #2ecc71)';
-            if (txt) txt.textContent = checked + ' / ' + TOTAL_CHECKS + ' listo' + (pct === 100 ? ' ✓' : '');
-        }
-
-        function resetearCuadre() {
-            localStorage.removeItem(CUADRE_KEY);
-            for (let i = 1; i <= TOTAL_CHECKS; i++) {
-                const el = document.getElementById('chk-' + i);
-                if (el) el.checked = false;
-            }
-            actualizarCuadre();
-        }
-
-        // Cargar estado guardado al iniciar
-        document.addEventListener('DOMContentLoaded', cargarCuadre);
-    </script>
+    <script src="src/exports_pasillo.js?v=1.4"></script>
     <script>
         // INIT
         renderProductos();

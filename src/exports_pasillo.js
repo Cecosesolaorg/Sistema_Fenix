@@ -73,35 +73,35 @@ async function enviarReporte() {
 
     if (!window.ExportApp) { mostrarToast('⚠️ Exportador no disponible'); return; }
 
-    const input = document.getElementById('input-companero-envio');
-    if (input) input.value = '';
-
-    const modal = document.getElementById('modal-confirmar-envio');
-    if (modal) {
-        modal.style.display = 'flex';
-        modal.offsetHeight;
-        modal.classList.remove('hidden');
-        setTimeout(() => input && input.focus(), 100);
-    }
+    // Sin pedir el nombre del compañero: se usa el que ya está en la sesión.
+    return confirmarYEnviarReporte();
 }
 
+// Compatibilidad: el modal de nombre ya no existe en el pasillo.
 function cerrarModalConfirmarEnvio() {
     const modal = document.getElementById('modal-confirmar-envio');
     if (modal) {
         modal.classList.add('hidden');
-        setTimeout(() => modal.style.display = 'none', 400);
+        modal.style.display = 'none';
     }
 }
 
+/** Compañero con el que se está inventariando, sin preguntar nada. */
+function companeroDeSesion(sesion) {
+    let nombre = '';
+    if (typeof partnerSeleccionado !== 'undefined' && partnerSeleccionado && partnerSeleccionado.nombre) {
+        nombre = partnerSeleccionado.nombre;
+    } else if (sesion && sesion.partner && sesion.partner.nombre) {
+        nombre = sesion.partner.nombre;
+    }
+    const limpio = String(nombre || '').trim().toUpperCase();
+    return limpio !== '' ? limpio : 'SIN COMPAÑERO';
+}
+
 async function confirmarYEnviarReporte() {
-    const input = document.getElementById('input-companero-envio');
-    const confirmName = (input && input.value) ? input.value : '';
-    const comp = (confirmName.trim() !== '') ? confirmName.trim().toUpperCase() : 'SIN COMPAÑERO';
-
-    cerrarModalConfirmarEnvio();
-
     const sesion = JSON.parse(localStorage.getItem('fenix_pasillo1_sesion') || '{}');
     const resp = sesion.yo?.nombre || yo.nombre || 'Inventarista';
+    const comp = companeroDeSesion(sesion);
 
     const btn = document.getElementById('btn-enviar-sistema');
     btn.disabled = true;

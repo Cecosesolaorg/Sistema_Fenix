@@ -255,6 +255,24 @@ esos 20. El resto queda a un toque con **Ver todos**, sin perder el catálogo.
 Entre inventarios, el admin debe usar **Cerrar e Inicializar a 0** en el
 pasillo. Esa acción define la ronda y limpia los conteos de los teléfonos.
 
+### 10. Pasillo más simple: sin Cuadre y sin preguntar compañero
+
+**Qué se cambió**
+
+- Se quitó del cajón lateral la sección **Cuadre** con su lista de cinco
+  verificaciones, la barra de progreso, el botón de resetear y su
+  almacenamiento en `localStorage`.
+- **Enviar al Sistema** ya no abre el modal que pedía el nombre del compañero:
+  envía directo usando el compañero de la sesión y, si no hay, `SIN COMPAÑERO`.
+- Se eliminaron el modal, el campo de texto y el CSS asociado. **Descargar**
+  conserva su pregunta, porque ese flujo no cambió.
+
+**Cómo mejora**
+
+Menos pasos para enviar el reporte en plena feria y menos campos que completar
+con prisa. El nombre que queda en el archivo lo toma de la sesión, no de la
+memoria de cada persona.
+
 ---
 
 ## Hallazgos corregidos
