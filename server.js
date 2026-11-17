@@ -50,14 +50,83 @@ const getFolderName = (aisleName) => {
 
     const safeAisle = aisleName.replace(/[^a-zA-Z0-9\s-]/g, '').trim().toUpperCase();
 
-    // Carpeta principal: "SABADO 18 DE JULIO"
-    const globalFolder = `${dayName} ${dayNum} DE ${monthName}`;
+    // Carpeta del mes: "NOVIEMBRE 2026"
+    const monthFolder = `${monthName} ${now.getFullYear()}`;
 
-    // Carpeta anidada: "PASILLO PASTA"
+    // Carpeta del día: "SABADO 14 DE NOVIEMBRE"
+    const dayFolder = `${dayName} ${dayNum} DE ${monthName}`;
+
+    // Carpeta del pasillo: "PASILLO PASTA"
     const subFolder = safeAisle;
 
-    return path.join(globalFolder, subFolder);
+    return path.join(monthFolder, dayFolder, subFolder);
 };
+
+// ── Organizar los reportes viejos en carpetas por mes ─────────────────────
+const MESES_ES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+    'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+
+function anioDeCarpeta(dir) {
+    let anio = new Date().getFullYear();
+    try {
+        const archivos = [];
+        const recorrer = (d) => {
+            for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+                const p = path.join(d, e.name);
+                if (e.isDirectory()) recorrer(p);
+                else if (e.isFile()) archivos.push(p);
+            }
+        };
+        recorrer(dir);
+        if (archivos.length) {
+            const conteo = {};
+            for (const a of archivos) {
+                const y = new Date(fs.statSync(a).mtime).getFullYear();
+                conteo[y] = (conteo[y] || 0) + 1;
+            }
+            anio = Number(Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a] || b - a)[0]);
+        } else {
+            anio = new Date(fs.statSync(dir).mtime).getFullYear();
+        }
+    } catch (e) { /* usar el año actual */ }
+    return anio;
+}
+
+// Mueve las carpetas de día que están sueltas ("SABADO 14 DE NOVIEMBRE")
+// a la carpeta del mes ("NOVIEMBRE 2026"). Es idempotente.
+function migrarReportesACarpetaMes() {
+    if (!fs.existsSync(REPORTES_DIR)) return;
+    const dia = '(DOMINGO|LUNES|MARTES|MI[ÉE]RCOLES|JUEVES|VIERNES|S[ÁA]BADO)';
+    const mes = '(' + MESES_ES.join('|') + ')';
+    const patronDia = new RegExp('^' + dia + '\\s+\\d{1,2}\\s+DE\\s+' + mes + '$', 'i');
+    let movidos = 0;
+
+    for (const entrada of fs.readdirSync(REPORTES_DIR, { withFileTypes: true })) {
+        if (!entrada.isDirectory()) continue;
+        const nombre = entrada.name;
+        const coincidencia = nombre.match(patronDia);
+        if (!coincidencia) continue;
+
+        const mesNombre = coincidencia[2].toUpperCase();
+        const origen = path.join(REPORTES_DIR, nombre);
+        const anio = anioDeCarpeta(origen);
+        const destinoPadre = path.join(REPORTES_DIR, `${mesNombre} ${anio}`);
+        const destino = path.join(destinoPadre, nombre);
+
+        if (fs.existsSync(destino)) continue; // ya existe: no tocar
+        try {
+            ensureSecureDir(destinoPadre);
+            fs.renameSync(origen, destino);
+            movidos++;
+            console.log(`Reportes: ${nombre} -> ${mesNombre} ${anio}/${nombre}`);
+        } catch (e) {
+            console.error(`No se pudo mover ${nombre}:`, e.message);
+        }
+    }
+    if (movidos) console.log(`Reportes: ${movidos} carpeta(s) organizadas por mes.`);
+}
+
+migrarReportesACarpetaMes();
 
 const getContentType = (filePath) => {
     const extname = path.extname(filePath).toLowerCase();

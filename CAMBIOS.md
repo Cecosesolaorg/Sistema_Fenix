@@ -333,6 +333,26 @@ papel o PDF sin depender de abrir el Excel.
 
 ---
 
+### 13. Reportes organizados por mes y día
+
+**Qué se cambió**
+
+- Los reportes nuevos se guardan en `MES AÑO/DÍA/PASILLO/`, por ejemplo
+  `NOVIEMBRE 2026/DOMINGO 15 DE NOVIEMBRE/PASILLO PASTA/`.
+- Al arrancar, el servidor mueve las carpetas de día que estaban sueltas a la
+  carpeta del mes que les corresponde. El año se toma de la fecha de los
+  archivos. No borra nada y no toca carpetas que no sean de día.
+- La vista **Reportes** muestra la misma jerarquía: mes → día → pasillo, con
+  el conteo de días, pasillos y archivos de cada mes.
+- El filtro por pasillo y la comparación siguen funcionando con la nueva ruta.
+
+**Cómo mejora**
+
+Los inventarios quedan ordenados por mes y por día en el servidor, y en la
+pantalla se navega igual que en las carpetas.
+
+---
+
 ## Hallazgos corregidos
 
 | ID | Hallazgo | Estado |

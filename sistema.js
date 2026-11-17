@@ -47,9 +47,8 @@ function renderizarReportes() {
     let reportesAMostrar = cachedReportes;
     if (filtroPasillo) {
         reportesAMostrar = cachedReportes.filter(r => {
-            const folderSplit = r.filename ? r.filename.split('/') : [];
-            const extractedAisle = folderSplit.length >= 2 ? folderSplit[1] : (r.aisleName || r.pasillo || '');
-            return extractedAisle.toUpperCase() === filtroPasillo.toUpperCase();
+            const pasillo = (r.aisleName || r.folderName || r.pasillo || '').toUpperCase();
+            return pasillo === filtroPasillo.toUpperCase();
         });
     }
 
@@ -63,63 +62,87 @@ function renderizarReportes() {
         return;
     }
 
-    // Agrupar por [Fecha Global] -> [Pasillo]
-    const groups = {};
+    // Agrupar por [Mes] -> [Día] -> [Pasillo]
+    const months = {};
 
-    reportesAMostrar.forEach((rep, idx) => {
+    reportesAMostrar.forEach((rep) => {
         const originalIndex = cachedReportes.indexOf(rep);
-        let dateFolder = "REPORTES GUARDADOS";
-        let aisleFolder = (rep.aisleName || rep.pasillo || 'DESCONOCIDO').toUpperCase();
+        const parts = rep.filename ? rep.filename.split('/') : [];
+        let monthFolder = 'SIN MES';
+        let dateFolder = 'REPORTES GUARDADOS';
+        let aisleFolder = (rep.aisleName || rep.folderName || rep.pasillo || 'DESCONOCIDO').toUpperCase();
 
-        if (rep.filename) {
-            const parts = rep.filename.split('/');
-            if (parts.length >= 3) {
-                dateFolder = parts[0].toUpperCase();
-                aisleFolder = parts[1].toUpperCase();
-            } else if (parts.length === 2) {
-                dateFolder = parts[0].toUpperCase();
-                aisleFolder = "ARCHIVOS";
-            }
+        if (parts.length >= 4) {
+            monthFolder = parts[parts.length - 4].toUpperCase();
+            dateFolder = parts[parts.length - 3].toUpperCase();
+            aisleFolder = (parts[parts.length - 2] || aisleFolder).toUpperCase();
+        } else if (parts.length === 3) {
+            dateFolder = parts[0].toUpperCase();
+            aisleFolder = parts[1].toUpperCase();
+        } else if (parts.length === 2) {
+            dateFolder = parts[0].toUpperCase();
+            aisleFolder = 'ARCHIVOS';
         }
 
-        if (!groups[dateFolder]) {
-            groups[dateFolder] = {
-                dateTitle: dateFolder,
-                dateObj: new Date(rep.fecha_iso || rep.fecha),
-                aisles: {}
-            };
+        const f = new Date(rep.fecha_iso || rep.fecha);
+        const fechaValida = !isNaN(f.getTime());
+
+        if (!months[monthFolder]) {
+            months[monthFolder] = { monthTitle: monthFolder, monthObj: fechaValida ? f : null, days: {} };
+        } else if (fechaValida && (!months[monthFolder].monthObj || f > months[monthFolder].monthObj)) {
+            months[monthFolder].monthObj = f;
         }
 
-        if (!groups[dateFolder].aisles[aisleFolder]) {
-            groups[dateFolder].aisles[aisleFolder] = {
+        const monthGroup = months[monthFolder];
+        if (!monthGroup.days[dateFolder]) {
+            monthGroup.days[dateFolder] = { dateTitle: dateFolder, dateObj: fechaValida ? f : null, aisles: {} };
+        } else if (fechaValida && (!monthGroup.days[dateFolder].dateObj || f > monthGroup.days[dateFolder].dateObj)) {
+            monthGroup.days[dateFolder].dateObj = f;
+        }
+
+        const dayGroup = monthGroup.days[dateFolder];
+        if (!dayGroup.aisles[aisleFolder]) {
+            dayGroup.aisles[aisleFolder] = {
                 title: aisleFolder,
                 reports: []
             };
         }
 
-        groups[dateFolder].aisles[aisleFolder].reports.push({ rep, originalIndex });
+        dayGroup.aisles[aisleFolder].reports.push({ rep, originalIndex });
     });
 
-    const sortedDates = Object.values(groups).sort((a, b) => {
-        if (!a.dateObj || isNaN(a.dateObj.getTime())) return 1;
-        if (!b.dateObj || isNaN(b.dateObj.getTime())) return -1;
-        return b.dateObj.getTime() - a.dateObj.getTime();
+    const ordenarPorFecha = (a, b) => {
+        const ta = a.dateObj && !isNaN(a.dateObj.getTime()) ? a.dateObj.getTime() : -Infinity;
+        const tb = b.dateObj && !isNaN(b.dateObj.getTime()) ? b.dateObj.getTime() : -Infinity;
+        return tb - ta;
+    };
+
+    const sortedMonths = Object.values(months).sort((a, b) => {
+        if (a.monthTitle === 'SIN MES') return 1;
+        if (b.monthTitle === 'SIN MES') return -1;
+        return ordenarPorFecha(a, b);
     });
 
-    sortedDates.forEach((dateGroup, dIdx) => {
-        const dateId = 'date-folder-' + dIdx;
+    sortedMonths.forEach((monthGroup, mIdx) => {
+        const monthId = 'month-folder-' + mIdx;
+        const monthDays = Object.values(monthGroup.days);
+        const pasillosUnicos = new Set();
         let totalFiles = 0;
-        Object.values(dateGroup.aisles).forEach(ag => totalFiles += ag.reports.length);
+        monthDays.forEach(d => {
+            totalFiles += Object.values(d.aisles).reduce((n, ag) => n + ag.reports.length, 0);
+            Object.keys(d.aisles).forEach(p => pasillosUnicos.add(p));
+        });
+        const totalAisles = pasillosUnicos.size;
 
-        const dateCard = document.createElement('div');
-        dateCard.className = 'glass';
-        dateCard.style.cssText = 'border-radius: 16px; overflow: hidden; margin-bottom: 20px; border: 1px solid rgba(103,58,183,0.2);';
+        const monthCard = document.createElement('div');
+        monthCard.className = 'glass';
+        monthCard.style.cssText = 'border-radius: 16px; overflow: hidden; margin-bottom: 24px; border: 1px solid rgba(46,125,50,0.25);';
 
-        const dateHeader = document.createElement('div');
-        dateHeader.style.cssText = 'padding: 18px 20px; cursor: pointer; display: flex; align-items: center; gap: 14px; background: rgba(103,58,183,0.06); user-select: none; border-bottom: 1px solid rgba(0,0,0,0.05);';
-        dateHeader.onclick = function () {
-            const content = document.getElementById(dateId);
-            const icon = document.getElementById(dateId + '-icon');
+        const monthHeader = document.createElement('div');
+        monthHeader.style.cssText = 'padding: 20px 22px; cursor: pointer; display: flex; align-items: center; gap: 14px; background: linear-gradient(135deg, rgba(46,125,50,0.10), rgba(103,58,183,0.06)); user-select: none;';
+        monthHeader.onclick = function () {
+            const content = document.getElementById(monthId);
+            const icon = document.getElementById(monthId + '-icon');
             if (content.style.display === 'none') {
                 content.style.display = 'block';
                 icon.className = 'fa-solid fa-folder-open';
@@ -129,123 +152,174 @@ function renderizarReportes() {
             }
         };
 
-        dateHeader.innerHTML = `
-            <div style="width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #673ab7, #9575cd); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 10px rgba(103,58,183,0.3);">
-                <i class="fa-solid fa-folder" id="${dateId}-icon" style="color: white; font-size: 1.4rem;"></i>
+        monthHeader.innerHTML = `
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #2e7d32, #66bb6a); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(46,125,50,0.3);">
+                <i class="fa-solid fa-folder" id="${monthId}-icon" style="color: white; font-size: 1.4rem;"></i>
             </div>
             <div style="flex: 1;">
-                <div style="font-weight: 900; font-size: 1.15rem; color: #673ab7;">${esc(dateGroup.dateTitle)}</div>
+                <div style="font-weight: 900; font-size: 1.25rem; color: #2e7d32; letter-spacing: .4px;">${esc(monthGroup.monthTitle)}</div>
                 <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-top: 3px;">
-                    <i class="fa-solid fa-layer-group" style="margin-right: 4px;"></i>${Object.keys(dateGroup.aisles).length} Pasillos &nbsp;•&nbsp; <i class="fa-solid fa-file-excel" style="margin-right: 4px; color:#27ae60;"></i>${totalFiles} Archivos
+                    <i class="fa-regular fa-calendar" style="margin-right: 4px;"></i>${monthDays.length} día${monthDays.length !== 1 ? 's' : ''} &nbsp;•&nbsp;
+                    <i class="fa-solid fa-layer-group" style="margin-right: 4px;"></i>${totalAisles} pasillo${totalAisles !== 1 ? 's' : ''} &nbsp;•&nbsp;
+                    <i class="fa-solid fa-file-excel" style="margin-right: 4px; color:#27ae60;"></i>${totalFiles} archivo${totalFiles !== 1 ? 's' : ''}
                 </div>
             </div>
         `;
 
-        dateCard.appendChild(dateHeader);
+        monthCard.appendChild(monthHeader);
 
-        const dateContent = document.createElement('div');
-        dateContent.id = dateId;
-        dateContent.style.cssText = 'display: none; padding: 16px; background: rgba(255,255,255,0.3);';
+        const monthContent = document.createElement('div');
+        monthContent.id = monthId;
+        monthContent.style.cssText = 'display: none; padding: 16px; background: rgba(46,125,50,0.03);';
 
-        const sortedAisles = Object.values(dateGroup.aisles).sort((a, b) => a.title.localeCompare(b.title));
-
-        sortedAisles.forEach((aisleGroup, aIdx) => {
-            const aisleId = `${dateId}-aisle-${aIdx}`;
-
-            const aisleCard = document.createElement('div');
-            aisleCard.style.cssText = 'margin-bottom: 12px; border-radius: 12px; background: white; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 2px 5px rgba(0,0,0,0.02); overflow: hidden;';
-
-            const aisleHeader = document.createElement('div');
-            aisleHeader.style.cssText = 'padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: all 0.2s; user-select: none;';
-            aisleHeader.onmouseover = function () { this.style.background = 'rgba(243,156,18,0.05)'; };
-            aisleHeader.onmouseout = function () { this.style.background = 'transparent'; };
-            aisleHeader.onclick = function () {
-                const content = document.getElementById(aisleId);
-                const arrow = document.getElementById(aisleId + '-arrow');
-                const icon = document.getElementById(aisleId + '-icon');
-                if (content.style.display === 'none') {
-                    content.style.display = 'block';
-                    arrow.style.transform = 'rotate(90deg)';
-                    icon.className = 'fa-solid fa-folder-open';
-                } else {
-                    content.style.display = 'none';
-                    arrow.style.transform = 'rotate(0deg)';
-                    icon.className = 'fa-solid fa-folder';
-                }
-            };
-
-            aisleHeader.innerHTML = `
-                <i class="fa-solid fa-chevron-right" id="${aisleId}-arrow" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.25s ease; flex-shrink: 0;"></i>
-                <div style="width: 38px; height: 38px; border-radius: 8px; background: linear-gradient(135deg, #fff3e0, #ffe0b2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fa-solid fa-folder" id="${aisleId}-icon" style="color: #f39c12; font-size: 1.1rem;"></i>
-                </div>
-                <div style="flex: 1; font-weight: 800; font-size: 0.95rem; color: var(--text-color);">${esc(aisleGroup.title)}</div>
-                <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                    <span style="background: rgba(46,204,113,0.12); color: #27ae60; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">
-                        <i class="fa-solid fa-file-excel" style="margin-right: 3px;"></i>${aisleGroup.reports.length} archivo${aisleGroup.reports.length > 1 ? 's' : ''}
-                    </span>
-                </div>
-            `;
-
-            aisleCard.appendChild(aisleHeader);
-
-            const aisleContent = document.createElement('div');
-            aisleContent.id = aisleId;
-            aisleContent.style.cssText = 'display: none; border-top: 1px solid rgba(0,0,0,0.04); padding: 12px; background: #fafafa;';
-
-            aisleGroup.reports.forEach(({ rep, originalIndex }) => {
-                const fileDate = new Date(rep.fecha_iso || rep.fecha);
-                const timeStr = !isNaN(fileDate.getTime())
-                    ? fileDate.toLocaleString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                    : 'Sin fecha';
-                const responsable = rep.responsable || rep.usuario || 'Desconocido';
-                const fileName = rep.filename ? rep.filename.split('/').pop().replace(/\.xlsx$/i, '').toUpperCase() : `${rep.aisleName}_${responsable}`.toUpperCase();
-
-                let downloadHtml = '';
-                if (rep.type === 'xlsx') {
-                    downloadHtml = `<a href="/api/descargar-reporte/${encodeURIComponent(rep.filename)}" download
-                                   style="background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; border-radius: 8px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 600; font-size: 0.78rem; box-shadow: 0 2px 8px rgba(46,204,113,0.2); transition: all 0.2s;"
-                                   onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
-                                    <i class="fa-solid fa-download"></i> .xlsx
-                                </a>`;
-                } else {
-                    downloadHtml = `<button onclick="generarExcelReporte(${originalIndex})"
-                                        style="background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; border: none; border-radius: 8px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 8px rgba(46,204,113,0.2); transition: all 0.2s;"
-                                        onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
-                                    <i class="fa-solid fa-download"></i> Excel
-                                </button>`;
-                }
-
-                const fileRow = document.createElement('div');
-                fileRow.style.cssText = 'display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; transition: all 0.15s; background: white; border: 1px solid rgba(0,0,0,0.05);';
-                fileRow.onmouseover = function () { this.style.background = 'rgba(103,58,183,0.04)'; this.style.borderColor = 'rgba(103,58,183,0.1)'; };
-                fileRow.onmouseout = function () { this.style.background = 'white'; this.style.borderColor = 'rgba(0,0,0,0.05)'; };
-
-                fileRow.innerHTML = `
-                    <input type="checkbox" onchange="toggleSeleccionComparar(${originalIndex}, this)" style="transform: scale(1.15); cursor: pointer; accent-color: #673ab7; flex-shrink: 0;">
-                    <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <i class="fa-solid fa-file-excel" style="color: #2e7d32; font-size: 0.9rem;"></i>
-                    </div>
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            ${esc(fileName)}
-                        </div>
-                        <div style="font-size: 0.72rem; color: var(--text-muted);">
-                            <i class="fa-regular fa-clock" style="margin-right: 3px;"></i>${timeStr}
-                        </div>
-                    </div>
-                    <div>${downloadHtml}</div>
-                `;
-                aisleContent.appendChild(fileRow);
-            });
-
-            aisleCard.appendChild(aisleContent);
-            dateContent.appendChild(aisleCard);
+        monthDays.sort(ordenarPorFecha).forEach((dateGroup, dIdx) => {
+            monthContent.appendChild(construirDiaReportes(dateGroup, `${monthId}-date-${dIdx}`));
         });
 
-        dateCard.appendChild(dateContent);
-        container.appendChild(dateCard);
+        monthCard.appendChild(monthContent);
+        container.appendChild(monthCard);
     });
+}
+
+// Construye la tarjeta de un día con sus pasillos y archivos.
+function construirDiaReportes(dateGroup, dateId) {
+    let totalFiles = 0;
+    Object.values(dateGroup.aisles).forEach(ag => totalFiles += ag.reports.length);
+
+    const dateCard = document.createElement('div');
+    dateCard.className = 'glass';
+    dateCard.style.cssText = 'border-radius: 16px; overflow: hidden; margin-bottom: 20px; border: 1px solid rgba(103,58,183,0.2);';
+
+    const dateHeader = document.createElement('div');
+    dateHeader.style.cssText = 'padding: 18px 20px; cursor: pointer; display: flex; align-items: center; gap: 14px; background: rgba(103,58,183,0.06); user-select: none; border-bottom: 1px solid rgba(0,0,0,0.05);';
+    dateHeader.onclick = function () {
+        const content = document.getElementById(dateId);
+        const icon = document.getElementById(dateId + '-icon');
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            icon.className = 'fa-solid fa-folder-open';
+        } else {
+            content.style.display = 'none';
+            icon.className = 'fa-solid fa-folder';
+        }
+    };
+
+    dateHeader.innerHTML = `
+        <div style="width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #673ab7, #9575cd); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 10px rgba(103,58,183,0.3);">
+            <i class="fa-solid fa-folder" id="${dateId}-icon" style="color: white; font-size: 1.4rem;"></i>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 900; font-size: 1.15rem; color: #673ab7;">${esc(dateGroup.dateTitle)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-top: 3px;">
+                <i class="fa-solid fa-layer-group" style="margin-right: 4px;"></i>${Object.keys(dateGroup.aisles).length} Pasillos &nbsp;•&nbsp; <i class="fa-solid fa-file-excel" style="margin-right: 4px; color:#27ae60;"></i>${totalFiles} Archivos
+            </div>
+        </div>
+    `;
+
+    dateCard.appendChild(dateHeader);
+
+    const dateContent = document.createElement('div');
+    dateContent.id = dateId;
+    dateContent.style.cssText = 'display: none; padding: 16px; background: rgba(255,255,255,0.3);';
+
+    const sortedAisles = Object.values(dateGroup.aisles).sort((a, b) => a.title.localeCompare(b.title));
+
+    sortedAisles.forEach((aisleGroup, aIdx) => {
+        const aisleId = `${dateId}-aisle-${aIdx}`;
+
+        const aisleCard = document.createElement('div');
+        aisleCard.style.cssText = 'margin-bottom: 12px; border-radius: 12px; background: white; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 2px 5px rgba(0,0,0,0.02); overflow: hidden;';
+
+        const aisleHeader = document.createElement('div');
+        aisleHeader.style.cssText = 'padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: all 0.2s; user-select: none;';
+        aisleHeader.onmouseover = function () { this.style.background = 'rgba(243,156,18,0.05)'; };
+        aisleHeader.onmouseout = function () { this.style.background = 'transparent'; };
+        aisleHeader.onclick = function () {
+            const content = document.getElementById(aisleId);
+            const arrow = document.getElementById(aisleId + '-arrow');
+            const icon = document.getElementById(aisleId + '-icon');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                arrow.style.transform = 'rotate(90deg)';
+                icon.className = 'fa-solid fa-folder-open';
+            } else {
+                content.style.display = 'none';
+                arrow.style.transform = 'rotate(0deg)';
+                icon.className = 'fa-solid fa-folder';
+            }
+        };
+
+        aisleHeader.innerHTML = `
+            <i class="fa-solid fa-chevron-right" id="${aisleId}-arrow" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.25s ease; flex-shrink: 0;"></i>
+            <div style="width: 38px; height: 38px; border-radius: 8px; background: linear-gradient(135deg, #fff3e0, #ffe0b2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fa-solid fa-folder" id="${aisleId}-icon" style="color: #f39c12; font-size: 1.1rem;"></i>
+            </div>
+            <div style="flex: 1; font-weight: 800; font-size: 0.95rem; color: var(--text-color);">${esc(aisleGroup.title)}</div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                <span style="background: rgba(46,204,113,0.12); color: #27ae60; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">
+                    <i class="fa-solid fa-file-excel" style="margin-right: 3px;"></i>${aisleGroup.reports.length} archivo${aisleGroup.reports.length > 1 ? 's' : ''}
+                </span>
+            </div>
+        `;
+
+        aisleCard.appendChild(aisleHeader);
+
+        const aisleContent = document.createElement('div');
+        aisleContent.id = aisleId;
+        aisleContent.style.cssText = 'display: none; border-top: 1px solid rgba(0,0,0,0.04); padding: 12px; background: #fafafa;';
+
+        aisleGroup.reports.forEach(({ rep, originalIndex }) => {
+            const fileDate = new Date(rep.fecha_iso || rep.fecha);
+            const timeStr = !isNaN(fileDate.getTime())
+                ? fileDate.toLocaleString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : 'Sin fecha';
+            const responsable = rep.responsable || rep.usuario || 'Desconocido';
+            const fileName = rep.filename ? rep.filename.split('/').pop().replace(/\.xlsx$/i, '').toUpperCase() : `${rep.aisleName}_${responsable}`.toUpperCase();
+
+            let downloadHtml = '';
+            if (rep.type === 'xlsx') {
+                downloadHtml = `<a href="/api/descargar-reporte/${encodeURIComponent(rep.filename)}" download
+                               style="background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; border-radius: 8px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 600; font-size: 0.78rem; box-shadow: 0 2px 8px rgba(46,204,113,0.2); transition: all 0.2s;"
+                               onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
+                                <i class="fa-solid fa-download"></i> .xlsx
+                            </a>`;
+            } else {
+                downloadHtml = `<button onclick="generarExcelReporte(${originalIndex})"
+                                    style="background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; border: none; border-radius: 8px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 8px rgba(46,204,113,0.2); transition: all 0.2s;"
+                                    onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
+                                <i class="fa-solid fa-download"></i> Excel
+                            </button>`;
+            }
+
+            const fileRow = document.createElement('div');
+            fileRow.style.cssText = 'display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; transition: all 0.15s; background: white; border: 1px solid rgba(0,0,0,0.05);';
+            fileRow.onmouseover = function () { this.style.background = 'rgba(103,58,183,0.04)'; this.style.borderColor = 'rgba(103,58,183,0.1)'; };
+            fileRow.onmouseout = function () { this.style.background = 'white'; this.style.borderColor = 'rgba(0,0,0,0.05)'; };
+
+            fileRow.innerHTML = `
+                <input type="checkbox" onchange="toggleSeleccionComparar(${originalIndex}, this)" style="transform: scale(1.15); cursor: pointer; accent-color: #673ab7; flex-shrink: 0;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fa-solid fa-file-excel" style="color: #2e7d32; font-size: 0.9rem;"></i>
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${esc(fileName)}
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">
+                        <i class="fa-regular fa-clock" style="margin-right: 3px;"></i>${timeStr}
+                    </div>
+                </div>
+                <div>${downloadHtml}</div>
+            `;
+            aisleContent.appendChild(fileRow);
+        });
+
+        aisleCard.appendChild(aisleContent);
+        dateContent.appendChild(aisleCard);
+    });
+
+    dateCard.appendChild(dateContent);
+    return dateCard;
 }
 
 function toggleSeleccionComparar(index, checkbox) {

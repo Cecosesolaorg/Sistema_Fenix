@@ -192,6 +192,11 @@ el catálogo completo sin borrar nada.
 
 ### Reportes y comparación
 
+- Los reportes se guardan en `MES AÑO/DÍA/PASILLO/`. Por ejemplo:
+  `NOVIEMBRE 2026/DOMINGO 15 DE NOVIEMBRE/PASILLO PASTA/`.
+- La vista **Reportes** muestra la misma jerarquía: mes → día → pasillo.
+- Al iniciar, el servidor mueve las carpetas de día sueltas a su carpeta de
+  mes correspondiente, sin borrar archivos.
 - El `.xlsx` que se descarga o se envía al sistema muestra **FECHA**,
   **COMPAÑERO** y **PRODUCTOS CONTADOS**. Ya no repite el responsable.
 - En **Reportes**, al marcar dos archivos se abre la comparación entre los dos
