@@ -194,13 +194,15 @@ el catálogo completo sin borrar nada.
 
 - El `.xlsx` que se descarga o se envía al sistema muestra **FECHA**,
   **COMPAÑERO** y **PRODUCTOS CONTADOS**. Ya no repite el responsable.
-- En **Reportes**, al marcar dos archivos se abre la comparación producto por
-  producto, con las cantidades A/B y la diferencia.
+- En **Reportes**, al marcar dos archivos se abre la comparación entre los dos
+  conteos, producto por producto, con la cantidad de cada persona y la
+  diferencia. Sirve cuando dos personas cuentan el mismo pasillo para
+  descartar errores individuales.
 - **Imprimir / PDF** arma una hoja A4 vertical con tres bloques uno debajo
-  del otro: el inventario anterior completo, el más reciente completo y la
-  comparación con la diferencia. Cada bloque se titula con el compañero, la
-  fecha y el pasillo. Todo junto en el mismo documento, listo para imprimir o
-  guardar como PDF.
+  del otro: el conteo de cada persona completo y la comparación con la
+  diferencia. Cada bloque se titula con el nombre de la persona, la fecha y
+  el pasillo. Todo junto en el mismo documento, listo para imprimir o guardar
+  como PDF.
 - En la hoja impresa el historial largo se parte en varias líneas dentro de su
   columna y no invade la columna **Total**.
 - **Exportar Comparación** sigue generando el `.xlsx` de la comparación.

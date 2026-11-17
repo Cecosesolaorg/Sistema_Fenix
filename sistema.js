@@ -305,16 +305,16 @@ async function abrirModalComparar() {
 
         document.getElementById('compare-rep-a-info').innerHTML = `
                     <i class="fa-regular fa-calendar"></i> ${esc(dA.toLocaleString())}<br>
-                    <i class="fa-solid fa-user"></i> ${esc(repA.responsable || repA.usuario || 'Desconocido')}
+                    <i class="fa-solid fa-user"></i> ${esc(nombrePersona(repA, null) || 'Desconocido')}
                 `;
         document.getElementById('compare-rep-b-info').innerHTML = `
                     <i class="fa-regular fa-calendar"></i> ${esc(dB.toLocaleString())}<br>
-                    <i class="fa-solid fa-user"></i> ${esc(repB.responsable || repB.usuario || 'Desconocido')}
+                    <i class="fa-solid fa-user"></i> ${esc(nombrePersona(repB, null) || 'Desconocido')}
                 `;
 
-        // Actualizar cabeceras de la tabla con los nombres
-        const respA = repA.responsable || repA.usuario || 'Reporte A';
-        const respB = repB.responsable || repB.usuario || 'Reporte B';
+        // Actualizar cabeceras de la tabla con los nombres de cada persona
+        const respA = etiquetaConteo({ meta: {} }, repA, 1);
+        const respB = etiquetaConteo({ meta: {} }, repB, 2);
         document.getElementById('th-rep-a').textContent = respA.toUpperCase();
         document.getElementById('th-rep-b').textContent = respB.toUpperCase();
 
@@ -458,11 +458,13 @@ async function descargarComparacionExcel() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Comparación');
 
+    const etiquetaA = etiquetaConteo({ meta: {} }, data.repA.info, 1);
+    const etiquetaB = etiquetaConteo({ meta: {} }, data.repB.info, 2);
     ws.columns = [
         { header: 'Producto', key: 'prod', width: 45 },
-        { header: `Reporte A (${data.repA.date.toLocaleString()})`, key: 'qtyA', width: 25 },
-        { header: `Reporte B (${data.repB.date.toLocaleString()})`, key: 'qtyB', width: 25 },
-        { header: 'Diferencia (B - A)', key: 'diff', width: 20 }
+        { header: `${etiquetaA} (${data.repA.date.toLocaleString()})`, key: 'qtyA', width: 25 },
+        { header: `${etiquetaB} (${data.repB.date.toLocaleString()})`, key: 'qtyB', width: 25 },
+        { header: 'Diferencia', key: 'diff', width: 20 }
     ];
 
     const borderStyle = {
@@ -605,10 +607,30 @@ async function parseReporteCompleto(rep) {
     return salida;
 }
 
-function companeroVisible(full) {
-    let quien = String(full.meta.companero || '').trim();
-    if (!quien || quien === '---' || quien === 'SIN AYUDA') quien = 'SIN COMPAÑERO';
-    return quien;
+// El nombre del archivo es "PASILLO PERSONA - COMPAÑERO".
+// De ahí sacamos el nombre de quien hizo el conteo.
+function nombrePersona(rep, full) {
+    let nombre = String((rep && (rep.responsable || rep.usuario)) || '').trim();
+    if (nombre) {
+        const pasillo = String((rep && (rep.aisleName || rep.folderName)) || '').trim();
+        if (pasillo && nombre.toUpperCase().indexOf(pasillo.toUpperCase()) === 0) {
+            nombre = nombre.slice(pasillo.length).trim();
+        }
+        const corte = nombre.lastIndexOf(' - ');
+        if (corte > 0) nombre = nombre.slice(0, corte).trim();
+        nombre = nombre.replace(/\.(xlsx|json)$/i, '').trim();
+    }
+    if (nombre) return nombre;
+
+    const comp = String((full && full.meta && full.meta.companero) || '').trim();
+    if (comp && comp !== '---' && comp !== 'SIN AYUDA' && comp !== 'SIN COMPAÑERO') return comp;
+
+    return String((full && full.meta && full.meta.responsable) || '').trim();
+}
+
+// Etiqueta para la columna de la comparación: el nombre, o "Conteo 1/2".
+function etiquetaConteo(full, rep, numero) {
+    return nombrePersona(rep, full) || ('Conteo ' + numero);
 }
 
 function fechaVisible(full, rep) {
@@ -629,9 +651,9 @@ function pasilloVisible(rep) {
     return (rep && (rep.aisleName || rep.folderName)) || '';
 }
 
-// Encabezado de cada reporte: compañero · fecha · pasillo.
+// Encabezado de cada reporte: persona · fecha · pasillo.
 function tituloReporte(full, rep) {
-    return [companeroVisible(full), fechaVisible(full, rep), pasilloVisible(rep)]
+    return [nombrePersona(rep, full), fechaVisible(full, rep), pasilloVisible(rep)]
         .filter(function (parte) { return !!parte; })
         .join(' · ');
 }
@@ -702,6 +724,13 @@ async function imprimirComparacion() {
             .map(function (p) { return { producto: p, historial: '—', total: data.dataB[p] || 0 }; });
     }
 
+    let etiquetaA = etiquetaConteo(fullA, repA, 1);
+    let etiquetaB = etiquetaConteo(fullB, repB, 2);
+    if (etiquetaA.toUpperCase() === etiquetaB.toUpperCase()) {
+        etiquetaA += ' (1)';
+        etiquetaB += ' (2)';
+    }
+
     let sumA = 0;
     let sumB = 0;
     let sumDiff = 0;
@@ -746,6 +775,7 @@ async function imprimirComparacion() {
     td.prod { text-align: left; word-break: break-word; }
     td.num, th.num { text-align: center; white-space: nowrap; }
     td.hist { text-align: center; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+    th.conteo { text-align: center; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
     tbody tr { page-break-inside: avoid; }
     tfoot td { font-weight: bold; background: #e0e0e0; }
     .vacio { text-align: center; color: #777; }
@@ -772,10 +802,10 @@ async function imprimirComparacion() {
 
         <section class="bloque comp">
             <h2>Comparación</h2>
-            <p class="ficha">Anterior vs. reciente · ${data.products.length} productos · Diferencia total: ${sumDiff > 0 ? '+' : ''}${sumDiff}</p>
+            <p class="ficha">Los dos conteos del mismo pasillo · ${data.products.length} productos · Diferencia total: ${sumDiff > 0 ? '+' : ''}${sumDiff}</p>
             <table class="comparacion">
-                <colgroup><col style="width:56%"><col style="width:13%"><col style="width:13%"><col style="width:18%"></colgroup>
-                <thead><tr><th>Producto</th><th class="num">Anterior</th><th class="num">Reciente</th><th class="num">Dif.</th></tr></thead>
+                <colgroup><col style="width:46%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>
+                <thead><tr><th>Producto</th><th class="conteo">${esc(etiquetaA.toUpperCase())}</th><th class="conteo">${esc(etiquetaB.toUpperCase())}</th><th class="num">Dif.</th></tr></thead>
                 <tbody>${filasComparacion || '<tr><td colspan="4" class="vacio">Sin productos</td></tr>'}</tbody>
                 <tfoot><tr><td>TOTAL</td><td class="num">${sumA}</td><td class="num">${sumB}</td><td class="num">${sumDiff > 0 ? '+' : ''}${sumDiff}</td></tr></tfoot>
             </table>
@@ -783,8 +813,9 @@ async function imprimirComparacion() {
     </div>
 
     <p class="nota">
-        El primer bloque es el inventario anterior y el segundo el más reciente.
-        La diferencia positiva significa que la cantidad aumentó en el reciente.
+        Los dos primeros bloques son los conteos de cada persona sobre el mismo pasillo,
+        hechos para descartar errores individuales. La diferencia se calcula como
+        la columna derecha menos la izquierda.
         Generado por Inventario Fénix · ${esc(new Date().toLocaleString())}.
     </p>
 </body>
