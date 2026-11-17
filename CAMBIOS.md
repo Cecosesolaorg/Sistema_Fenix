@@ -318,6 +318,8 @@ una sesión vence de verdad, la persona se entera antes de cargar el pasillo.
   navegador.
 - La hoja de impresión repite la cabecera de cada tabla en cada página, evita
   cortar filas y usa letra compacta para que entren pasillos grandes.
+- El historial largo se envuelve en varias líneas dentro de su columna, sin
+  desbordarse sobre la columna **Total**. Se amplió la columna del historial.
 - **Exportar Comparación** se mantiene igual.
 
 **Cómo mejora**

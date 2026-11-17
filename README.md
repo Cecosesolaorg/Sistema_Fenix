@@ -200,6 +200,8 @@ el catálogo completo sin borrar nada.
   del otro: el Reporte A completo, el Reporte B completo y la comparación con
   la diferencia. Todo junto en el mismo documento, listo para imprimir o
   guardar como PDF.
+- En la hoja impresa el historial largo se parte en varias líneas dentro de su
+  columna y no invade la columna **Total**.
 - **Exportar Comparación** sigue generando el `.xlsx` de la comparación.
 
 ## Seguridad

@@ -618,7 +618,7 @@ function fichaReporte(full) {
 
 function tablaReporteCompleto(full) {
     if (!full.filas.length) {
-        return '<table class="reporte"><colgroup><col style="width:64%"><col style="width:16%"><col style="width:20%"></colgroup>' +
+        return '<table class="reporte"><colgroup><col style="width:50%"><col style="width:32%"><col style="width:18%"></colgroup>' +
             '<thead><tr><th>Producto</th><th class="num">Hist.</th><th class="num">Total</th></tr></thead>' +
             '<tbody><tr><td colspan="3" class="vacio">Sin productos</td></tr></tbody></table>';
     }
@@ -627,13 +627,13 @@ function tablaReporteCompleto(full) {
         totalUnd += f.total;
         return `<tr>
             <td class="prod">${i + 1}. ${esc(f.producto)}</td>
-            <td class="num">${esc(f.historial) || '—'}</td>
+            <td class="hist">${esc(f.historial) || '—'}</td>
             <td class="num">${f.total}</td>
         </tr>`;
     }).join('');
 
     return `<table class="reporte">
-        <colgroup><col style="width:64%"><col style="width:16%"><col style="width:20%"></colgroup>
+        <colgroup><col style="width:50%"><col style="width:32%"><col style="width:18%"></colgroup>
         <thead><tr><th>Producto</th><th class="num">Hist.</th><th class="num">Total</th></tr></thead>
         <tbody>${filas}</tbody>
         <tfoot><tr><td>TOTAL (${full.filas.length} prod.)</td><td></td><td class="num">${totalUnd}</td></tr></tfoot>
@@ -721,10 +721,11 @@ async function imprimirComparacion() {
     .ficha { font-size: 7.5px; margin: 0 0 4px; color: #333; word-break: break-word; page-break-after: avoid; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { display: table-header-group; }
-    th, td { border: 1px solid #888; padding: 2px 4px; font-size: 8px; vertical-align: top; }
+    th, td { border: 1px solid #888; padding: 2px 4px; font-size: 8px; vertical-align: top; overflow-wrap: anywhere; }
     th { background: #e8e8e8; font-size: 7.5px; text-transform: uppercase; }
     td.prod { text-align: left; word-break: break-word; }
     td.num, th.num { text-align: center; white-space: nowrap; }
+    td.hist { text-align: center; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
     tbody tr { page-break-inside: avoid; }
     tfoot td { font-weight: bold; background: #e0e0e0; }
     .vacio { text-align: center; color: #777; }
