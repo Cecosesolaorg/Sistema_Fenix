@@ -605,15 +605,35 @@ async function parseReporteCompleto(rep) {
     return salida;
 }
 
-function fichaReporte(full) {
-    const partes = [];
-    if (full.meta.fecha) partes.push('FECHA: ' + full.meta.fecha);
+function companeroVisible(full) {
     let quien = String(full.meta.companero || '').trim();
     if (!quien || quien === '---' || quien === 'SIN AYUDA') quien = 'SIN COMPAÑERO';
-    partes.push('COMPAÑERO: ' + quien);
-    const cuantos = full.meta.productos || full.filas.length;
-    if (cuantos) partes.push('PRODUCTOS: ' + cuantos);
-    return partes.map(esc).join(' · ');
+    return quien;
+}
+
+function fechaVisible(full, rep) {
+    let fecha = String(full.meta.fecha || '').trim();
+    // Si el reporte trae la fecha en ISO (JSON), mostrarla corta.
+    if (fecha && /^\d{4}-\d{2}-\d{2}T/.test(fecha)) {
+        const t = new Date(fecha);
+        if (!isNaN(t)) fecha = t.toLocaleDateString();
+    }
+    if (!fecha) {
+        const t = new Date((rep && (rep.fecha_iso || rep.fecha)) || '');
+        if (!isNaN(t)) fecha = t.toLocaleDateString();
+    }
+    return fecha;
+}
+
+function pasilloVisible(rep) {
+    return (rep && (rep.aisleName || rep.folderName)) || '';
+}
+
+// Encabezado de cada reporte: compañero · fecha · pasillo.
+function tituloReporte(full, rep) {
+    return [companeroVisible(full), fechaVisible(full, rep), pasilloVisible(rep)]
+        .filter(function (parte) { return !!parte; })
+        .join(' · ');
 }
 
 function tablaReporteCompleto(full) {
@@ -739,23 +759,23 @@ async function imprimirComparacion() {
 
     <div class="triple">
         <section class="bloque">
-            <h2>Reporte A · Anterior</h2>
-            <p class="ficha">${fichaReporte(fullA)}</p>
+            <h2>${esc(tituloReporte(fullA, repA).toUpperCase())}</h2>
+            <p class="ficha">PRODUCTOS: ${fullA.meta.productos || fullA.filas.length}</p>
             ${tablaReporteCompleto(fullA)}
         </section>
 
         <section class="bloque">
-            <h2>Reporte B · Reciente</h2>
-            <p class="ficha">${fichaReporte(fullB)}</p>
+            <h2>${esc(tituloReporte(fullB, repB).toUpperCase())}</h2>
+            <p class="ficha">PRODUCTOS: ${fullB.meta.productos || fullB.filas.length}</p>
             ${tablaReporteCompleto(fullB)}
         </section>
 
         <section class="bloque comp">
-            <h2>Comparación · B - A</h2>
-            <p class="ficha">${data.products.length} productos · Diferencia total: ${sumDiff > 0 ? '+' : ''}${sumDiff}</p>
+            <h2>Comparación</h2>
+            <p class="ficha">Anterior vs. reciente · ${data.products.length} productos · Diferencia total: ${sumDiff > 0 ? '+' : ''}${sumDiff}</p>
             <table class="comparacion">
                 <colgroup><col style="width:56%"><col style="width:13%"><col style="width:13%"><col style="width:18%"></colgroup>
-                <thead><tr><th>Producto</th><th class="num">A</th><th class="num">B</th><th class="num">Dif.</th></tr></thead>
+                <thead><tr><th>Producto</th><th class="num">Anterior</th><th class="num">Reciente</th><th class="num">Dif.</th></tr></thead>
                 <tbody>${filasComparacion || '<tr><td colspan="4" class="vacio">Sin productos</td></tr>'}</tbody>
                 <tfoot><tr><td>TOTAL</td><td class="num">${sumA}</td><td class="num">${sumB}</td><td class="num">${sumDiff > 0 ? '+' : ''}${sumDiff}</td></tr></tfoot>
             </table>
@@ -763,7 +783,8 @@ async function imprimirComparacion() {
     </div>
 
     <p class="nota">
-        Reporte A = más antiguo; Reporte B = más reciente. La diferencia positiva significa que aumentó en B.
+        El primer bloque es el inventario anterior y el segundo el más reciente.
+        La diferencia positiva significa que la cantidad aumentó en el reciente.
         Generado por Inventario Fénix · ${esc(new Date().toLocaleString())}.
     </p>
 </body>

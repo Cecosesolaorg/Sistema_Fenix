@@ -197,8 +197,9 @@ el catálogo completo sin borrar nada.
 - En **Reportes**, al marcar dos archivos se abre la comparación producto por
   producto, con las cantidades A/B y la diferencia.
 - **Imprimir / PDF** arma una hoja A4 vertical con tres bloques uno debajo
-  del otro: el Reporte A completo, el Reporte B completo y la comparación con
-  la diferencia. Todo junto en el mismo documento, listo para imprimir o
+  del otro: el inventario anterior completo, el más reciente completo y la
+  comparación con la diferencia. Cada bloque se titula con el compañero, la
+  fecha y el pasillo. Todo junto en el mismo documento, listo para imprimir o
   guardar como PDF.
 - En la hoja impresa el historial largo se parte en varias líneas dentro de su
   columna y no invade la columna **Total**.
