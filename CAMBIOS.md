@@ -353,6 +353,29 @@ pantalla se navega igual que en las carpetas.
 
 ---
 
+### 14. Vista «Entregas»: qué falta por entregar
+
+**Qué se cambió**
+
+- Nueva sección **Entregas** en el menú. Muestra, para el día elegido, el
+  estado de cada pasillo: **LISTO** (llegaron los 2 conteos), **EN CURSO**
+  (llegó 1) o **PENDIENTE** (ninguno).
+- Arriba hay tarjetas con los pasillos listos, en curso, pendientes y el total
+  de conteos que faltan, más una barra de avance del día.
+- Se cuentan **personas distintas** por pasillo: dos envíos de la misma persona
+  cuentan una sola vez. Cuentan los reportes `.json` y los `.xlsx`.
+- Abre en el día actual y permite consultar otro día con un selector.
+- Sólo el admin puede **Omitir** un pasillo en un día puntual (por ejemplo, si
+  ese día no se contó). Lo omitido no suma faltantes y se puede reactivar.
+- Los ajustes se guardan en `registros/entregas_omitidos.json`.
+
+**Cómo mejora**
+
+Antes había que abrir carpeta por carpeta para saber si faltaba un conteo. Ahora
+se ve de un vistazo cuántos inventarios faltan y qué pasillos ya están listos.
+
+---
+
 ## Hallazgos corregidos
 
 | ID | Hallazgo | Estado |

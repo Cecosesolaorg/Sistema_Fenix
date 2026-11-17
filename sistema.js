@@ -322,6 +322,225 @@ function construirDiaReportes(dateGroup, dateId) {
     return dateCard;
 }
 
+// ─── ENTREGAS DEL DÍA ───────────────────────────────────────────────────────
+// Cada pasillo queda LISTO cuando entregan sus 2 conteos. El servidor cuenta
+// personas distintas, así que dos envíos de la misma persona cuentan uno solo.
+
+function fechaLocalISO(fecha) {
+    const d = (fecha instanceof Date && !isNaN(fecha.getTime())) ? fecha : new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+}
+
+function rolActualSistema() {
+    try {
+        return (JSON.parse(localStorage.getItem('currentUser') || '{}') || {}).role || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+async function cargarEntregas() {
+    const input = document.getElementById('entregas-fecha');
+    if (input && !input.value) input.value = fechaLocalISO(new Date());
+    const fecha = (input && input.value) || fechaLocalISO(new Date());
+    const lista = document.getElementById('entregas-lista');
+
+    if (lista) {
+        lista.innerHTML = '<div class="glass" style="padding: 30px; text-align: center; border-radius: 14px;">' +
+            '<i class="fa-solid fa-spinner fa-spin" style="font-size: 1.6rem; color: #2e7d32;"></i>' +
+            '<p style="margin-top: 10px; color: var(--text-muted); font-weight: 600;">Cargando entregas...</p></div>';
+    }
+
+    try {
+        const respuesta = await fetch('/api/entregas?fecha=' + encodeURIComponent(fecha), { cache: 'no-store' });
+        if (respuesta.status === 401) {
+            window.location.href = 'index.html';
+            return;
+        }
+        const data = await respuesta.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Error del servidor');
+        renderEntregas(data);
+    } catch (e) {
+        console.error(e);
+        if (lista) {
+            lista.innerHTML = '<div class="glass" style="padding: 30px; text-align: center; border-radius: 14px; color: #e74c3c; font-weight: 700;">' +
+                'No se pudieron cargar las entregas. Revisá la conexión e intentá de nuevo.</div>';
+        }
+    }
+}
+
+function renderEntregas(data) {
+    const contenedor = document.getElementById('entregas-resumen');
+    const lista = document.getElementById('entregas-lista');
+    const progreso = document.getElementById('entregas-progreso');
+    if (!contenedor || !lista) return;
+
+    const r = data.resumen || {};
+    const total = Number(r.total) || 0;
+    const listos = Number(r.listos) || 0;
+
+    contenedor.innerHTML = '';
+    const tarjetas = [
+        { etiqueta: 'Listos', valor: listos, icono: 'fa-circle-check', color: '#2e7d32', fondo: 'rgba(46,125,50,0.10)' },
+        { etiqueta: 'En curso', valor: Number(r.enCurso) || 0, icono: 'fa-hourglass-half', color: '#f39c12', fondo: 'rgba(243,156,18,0.12)' },
+        { etiqueta: 'Pendientes', valor: Number(r.pendientes) || 0, icono: 'fa-circle-xmark', color: '#e74c3c', fondo: 'rgba(231,76,60,0.10)' },
+        { etiqueta: 'Conteos que faltan', valor: Number(r.faltan) || 0, icono: 'fa-file-circle-plus', color: '#2980b9', fondo: 'rgba(41,128,185,0.10)' }
+    ];
+    if (Number(r.omitidos) > 0) {
+        tarjetas.push({ etiqueta: 'Omitidos', valor: Number(r.omitidos), icono: 'fa-ban', color: '#7f8c8d', fondo: 'rgba(127,140,141,0.12)' });
+    }
+
+    tarjetas.forEach(function (t) {
+        const tarjeta = document.createElement('div');
+        tarjeta.className = 'glass';
+        tarjeta.style.cssText = 'border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px;';
+        tarjeta.innerHTML = '<div style="width: 40px; height: 40px; border-radius: 11px; background: ' + t.fondo +
+            '; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">' +
+            '<i class="fa-solid ' + t.icono + '" style="color: ' + t.color + '; font-size: 1.05rem;"></i></div>' +
+            '<div><div style="font-size: 1.35rem; font-weight: 900; color: ' + t.color + '; line-height: 1;">' +
+            t.valor + '</div><div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; margin-top: 3px;">' +
+            esc(t.etiqueta).toUpperCase() + '</div></div>';
+        contenedor.appendChild(tarjeta);
+    });
+
+    if (progreso) {
+        const porcentaje = total > 0 ? Math.round((listos / total) * 100) : 0;
+        progreso.style.display = 'block';
+        progreso.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">' +
+            '<div style="font-weight: 800; font-size: 0.9rem;"><i class="fa-solid fa-clipboard-check" style="color: #2e7d32; margin-right: 6px;"></i>' +
+            listos + ' de ' + total + ' pasillos listos</div>' +
+            '<div style="font-weight: 800; color: ' + (porcentaje === 100 ? '#2e7d32' : '#f39c12') + ';">' + porcentaje + '%</div></div>' +
+            '<div style="height: 10px; border-radius: 20px; background: rgba(0,0,0,0.08); overflow: hidden;">' +
+            '<div style="height: 100%; width: ' + porcentaje + '%; border-radius: 20px; background: linear-gradient(90deg, #2e7d32, #66bb6a); transition: width 0.4s ease;"></div></div>' +
+            '<div style="margin-top: 8px; font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">' +
+            'Faltan <strong style="color: #2980b9;">' + (Number(r.faltan) || 0) + '</strong> conteos para completar el día.</div>';
+    }
+
+    lista.innerHTML = '';
+    const pasillos = Array.isArray(data.pasillos) ? data.pasillos : [];
+    if (pasillos.length === 0) {
+        lista.innerHTML = '<div class="glass" style="padding: 40px; text-align: center; border-radius: 16px;">' +
+            '<i class="fa-solid fa-folder-open" style="font-size: 2.4rem; color: var(--text-muted); opacity: 0.4;"></i>' +
+            '<p style="margin-top: 12px; color: var(--text-muted); font-weight: 700;">No hay pasillos configurados para contar.</p></div>';
+        return;
+    }
+
+    const aspecto = {
+        listo: { color: '#2e7d32', fondo: 'rgba(46,125,50,0.10)', icono: 'fa-circle-check', etiqueta: 'LISTO' },
+        en_curso: { color: '#f39c12', fondo: 'rgba(243,156,18,0.14)', icono: 'fa-hourglass-half', etiqueta: 'EN CURSO' },
+        pendiente: { color: '#e74c3c', fondo: 'rgba(231,76,60,0.10)', icono: 'fa-circle-xmark', etiqueta: 'PENDIENTE' },
+        omitido: { color: '#7f8c8d', fondo: 'rgba(127,140,141,0.14)', icono: 'fa-ban', etiqueta: 'OMITIDO' }
+    };
+
+    const esAdmin = rolActualSistema() === 'admin';
+
+    pasillos.forEach(function (p) {
+        const a = aspecto[p.estado] || aspecto.pendiente;
+
+        const fila = document.createElement('div');
+        fila.className = 'glass';
+        fila.style.cssText = 'border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border-left: 4px solid ' + a.color + ';';
+
+        const icono = document.createElement('div');
+        icono.style.cssText = 'width: 40px; height: 40px; border-radius: 11px; background: ' + a.fondo + '; display: flex; align-items: center; justify-content: center; flex-shrink: 0;';
+        icono.innerHTML = '<i class="fa-solid ' + a.icono + '" style="color: ' + a.color + '; font-size: 1.05rem;"></i>';
+
+        const info = document.createElement('div');
+        info.style.cssText = 'flex: 1; min-width: 180px;';
+
+        const titulo = document.createElement('div');
+        titulo.style.cssText = 'font-weight: 800; font-size: 0.95rem;';
+        titulo.textContent = p.pasillo;
+
+        const detalle = document.createElement('div');
+        detalle.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center;';
+
+        const personas = Array.isArray(p.personas) ? p.personas : [];
+        if (personas.length === 0) {
+            const sin = document.createElement('span');
+            sin.style.cssText = 'color: var(--text-muted); font-size: 0.78rem; font-weight: 600;';
+            sin.textContent = p.estado === 'omitido' ? 'No se cuenta este día' : 'Todavía nadie entregó';
+            detalle.appendChild(sin);
+        } else {
+            personas.forEach(function (persona) {
+                const chip = document.createElement('span');
+                chip.style.cssText = 'background: rgba(46,125,50,0.10); color: #2e7d32; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;';
+                chip.textContent = persona.nombre;
+                if (persona.ultima) {
+                    const f = new Date(persona.ultima);
+                    if (!isNaN(f.getTime())) {
+                        chip.title = 'Entregó a las ' + f.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+                    }
+                }
+                detalle.appendChild(chip);
+            });
+        }
+
+        if (p.estado === 'en_curso' && p.faltan > 0) {
+            const falta = document.createElement('span');
+            falta.style.cssText = 'color: #f39c12; font-size: 0.75rem; font-weight: 800;';
+            falta.textContent = 'Falta ' + p.faltan + ' conteo' + (p.faltan === 1 ? '' : 's');
+            detalle.appendChild(falta);
+        }
+
+        info.appendChild(titulo);
+        info.appendChild(detalle);
+
+        const contador = document.createElement('div');
+        contador.style.cssText = 'text-align: right; min-width: 64px;';
+        contador.innerHTML = '<span style="font-size: 1.1rem; font-weight: 900; color: ' + a.color + ';">' + (Number(p.entregados) || 0) + '</span>' +
+            '<span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;"> / ' + (Number(p.meta) || 2) + '</span>' +
+            '<div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700;">conteos</div>';
+
+        const chipEstado = document.createElement('span');
+        chipEstado.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; background: ' + a.fondo + '; color: ' + a.color + '; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.4px; white-space: nowrap;';
+        chipEstado.innerHTML = '<i class="fa-solid ' + a.icono + '"></i>' + a.etiqueta;
+
+        fila.appendChild(icono);
+        fila.appendChild(info);
+        fila.appendChild(contador);
+        fila.appendChild(chipEstado);
+
+        if (esAdmin) {
+            const omitido = p.estado === 'omitido';
+            const boton = document.createElement('button');
+            boton.textContent = omitido ? 'Reactivar' : 'Omitir';
+            boton.title = omitido ? 'Volver a contar este pasillo' : 'Marcar que hoy no se cuenta';
+            boton.style.cssText = 'background: transparent; border: 1px solid rgba(0,0,0,0.15); color: var(--text-muted); padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 0.72rem; cursor: pointer; transition: all 0.2s;';
+            boton.onmouseover = function () { this.style.background = 'rgba(0,0,0,0.05)'; };
+            boton.onmouseout = function () { this.style.background = 'transparent'; };
+            boton.onclick = function () { alternarOmitirEntrega(p.pasillo, !omitido); };
+            fila.appendChild(boton);
+        }
+
+        lista.appendChild(fila);
+    });
+}
+
+async function alternarOmitirEntrega(pasillo, omitido) {
+    const input = document.getElementById('entregas-fecha');
+    const fecha = (input && input.value) || fechaLocalISO(new Date());
+    try {
+        const respuesta = await fetch('/api/entregas/omitir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fecha: fecha, pasillo: pasillo, omitido: omitido })
+        });
+        if (respuesta.status === 403) {
+            alert('Solo un administrador puede hacer este ajuste.');
+            return;
+        }
+        const data = await respuesta.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Error del servidor');
+        mostrarToastSistema(omitido ? '⏭️ ' + pasillo + ' omitido por hoy.' : '↩️ ' + pasillo + ' vuelve a contar.');
+        cargarEntregas();
+    } catch (e) {
+        console.error(e);
+        alert('No se pudo guardar el ajuste: ' + e.message);
+    }
+}
+
 function toggleSeleccionComparar(index, checkbox) {
     if (checkbox.checked) {
         if (seleccionadosParaComparar.length >= 2) {
@@ -1183,6 +1402,11 @@ document.addEventListener('DOMContentLoaded', () => {
         reportesNavBtn.addEventListener('click', () => {
             if (cachedReportes.length === 0) cargarReportes();
         });
+    }
+
+    const entregasNavBtn = document.querySelector('[data-target="view-entregas"]');
+    if (entregasNavBtn) {
+        entregasNavBtn.addEventListener('click', cargarEntregas);
     }
 
     const pasillosNavBtn = document.querySelector('[data-target="view-pasillos"]');

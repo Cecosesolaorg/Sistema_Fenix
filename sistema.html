@@ -41,6 +41,10 @@
                     <i class="fa-solid fa-file-excel"></i>
                     <span>Reportes</span>
                 </a>
+                <a href="#" class="nav-item" data-target="view-entregas">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>Entregas</span>
+                </a>
                 <a href="#" class="nav-item" data-target="view-usuarios">
                     <i class="fa-solid fa-users"></i>
                     <span>Usuarios</span>
@@ -168,6 +172,47 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+
+                <!-- Vista Entregas: qué pasillos faltan por entregar -->
+                <div id="view-entregas" class="dashboard-content view-section" style="display: none;">
+                    <div class="page-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div
+                                style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #2e7d32, #66bb6a); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(46,125,50,0.3);">
+                                <i class="fa-solid fa-clipboard-check" style="color: white; font-size: 1.2rem;"></i>
+                            </div>
+                            <div>
+                                <h2 class="page-title" style="margin-bottom: 0; font-size: 1.4rem;">Entregas del Día</h2>
+                                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0 0;">Cada pasillo
+                                    queda <strong>listo</strong> cuando entregan sus 2 conteos</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <input type="date" id="entregas-fecha" onchange="cargarEntregas()"
+                                style="padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.05); color: var(--text-color); font-weight: 600; outline: none; font-size: 0.85rem;">
+                            <button onclick="cargarEntregas()"
+                                style="background: linear-gradient(135deg, #2e7d32, #66bb6a); color: white; border: none; padding: 10px 18px; border-radius: 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(46,125,50,0.25); transition: all 0.2s;"
+                                onmouseover="this.style.transform='translateY(-1px)'"
+                                onmouseout="this.style.transform='translateY(0)'">
+                                <i class="fa-solid fa-rotate-right"></i> Actualizar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="entregas-resumen"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px;">
+                    </div>
+                    <div id="entregas-progreso" class="glass"
+                        style="border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; display: none;"></div>
+                    <div id="entregas-lista" style="display: flex; flex-direction: column; gap: 10px;">
+                        <div class="glass" style="padding: 40px; text-align: center; border-radius: 16px;">
+                            <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: #2e7d32;"></i>
+                            <p style="margin-top: 12px; color: var(--text-muted); font-weight: 600;">Cargando
+                                entregas...</p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Vista Dashboard (Antes Historial de Accesos) -->
@@ -568,7 +613,7 @@
     <script src="src/products.js?v=2"></script>
     <!-- Custom JS -->
     <script src="app.js?v=2.6"></script>
-    <script src="sistema.js?v=3.5"></script>
+    <script src="sistema.js?v=3.6"></script>
 </body>
 
 </html>

@@ -212,6 +212,20 @@ el catálogo completo sin borrar nada.
   columna y no invade la columna **Total**.
 - **Exportar Comparación** sigue generando el `.xlsx` de la comparación.
 
+### Entregas del día
+
+- La vista **Entregas** muestra qué pasillos faltan por entregar en un día.
+  Cada pasillo queda **LISTO** cuando entregan sus **2 conteos**; con uno queda
+  **EN CURSO** y sin ninguno **PENDIENTE**.
+- Arriba se ve el resumen: pasillos listos, en curso, pendientes y cuántos
+  conteos faltan en total, con una barra de avance.
+- Cuenta **personas distintas**: si la misma persona envía dos veces, cuenta
+  una sola. Sirven tanto los reportes `.json` como los `.xlsx`.
+- Abre en el día actual y tiene un selector para revisar cualquier otro día.
+- Sólo el admin puede **Omitir** un pasillo en un día puntual (por ejemplo, si
+  ese día no se contó). El pasillo pasa a **OMITIDO** y deja de sumar
+  faltantes; se puede **Reactivar** cuando haga falta.
+
 ## Seguridad
 
 Estado actual del proyecto:

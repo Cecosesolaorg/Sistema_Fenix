@@ -128,6 +128,189 @@ function migrarReportesACarpetaMes() {
 
 migrarReportesACarpetaMes();
 
+// ── Entregas del día: cuántos conteos faltan por pasillo ────────────────────
+// Cada pasillo queda LISTO cuando lo entregan dos personas distintas. La meta
+// es fija para todos; el admin sólo puede omitir un pasillo en un día puntual
+// (por ejemplo, si ese día no se contó).
+const META_CONTEOS_POR_PASILLO = 2;
+const ENTREGAS_OMITIDOS_PATH = path.join(DIRECTORY, 'entregas_omitidos.json');
+const DIAS_SEMANA_ES = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'];
+
+/** Carpetas de mes y día que corresponden a una fecha ("NOVIEMBRE 2026" / "MARTES 17 DE NOVIEMBRE"). */
+function carpetasDeFecha(fecha) {
+    const d = (fecha instanceof Date && !isNaN(fecha.getTime())) ? fecha : new Date();
+    const mes = MESES_ES[d.getMonth()];
+    return {
+        mes: `${mes} ${d.getFullYear()}`,
+        dia: `${DIAS_SEMANA_ES[d.getDay()]} ${d.getDate()} DE ${mes}`
+    };
+}
+
+/** Texto comparable: mayúsculas, sin acentos ni signos. */
+function normalizarEntrega(valor) {
+    return String(valor === null || valor === undefined ? '' : valor)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9 ]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function claveFechaLocal(fecha) {
+    const d = (fecha instanceof Date && !isNaN(fecha.getTime())) ? fecha : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function leerEntregasOmitidas() {
+    try {
+        const data = JSON.parse(fs.readFileSync(ENTREGAS_OMITIDOS_PATH, 'utf8'));
+        return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarEntregasOmitidas(data) {
+    const tmp = ENTREGAS_OMITIDOS_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 4) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, ENTREGAS_OMITIDOS_PATH);
+    try { fs.chmodSync(ENTREGAS_OMITIDOS_PATH, 0o600); } catch (e) { }
+}
+
+/** Carpetas del día pedido: formato nuevo (MES/DÍA) y formato viejo (día suelto). */
+function carpetasDelDia(fecha) {
+    if (!fs.existsSync(REPORTES_DIR)) return [];
+    const dia = carpetasDeFecha(fecha).dia.toUpperCase();
+    const encontradas = [];
+    const agregar = (dir) => {
+        try {
+            if (fs.statSync(dir).isDirectory() && !encontradas.includes(dir)) encontradas.push(dir);
+        } catch (e) { /* no existe */ }
+    };
+    for (const entrada of fs.readdirSync(REPORTES_DIR, { withFileTypes: true })) {
+        if (!entrada.isDirectory()) continue;
+        const ruta = path.join(REPORTES_DIR, entrada.name);
+        if (entrada.name.toUpperCase() === dia) agregar(ruta);
+        else agregar(path.join(ruta, dia));
+    }
+    return encontradas;
+}
+
+/** Pasillos que deberían entregarse, según el catálogo y la configuración. */
+function pasillosEsperadosEntregas() {
+    let productos = {};
+    try {
+        productos = JSON.parse(fs.readFileSync(path.join(__dirname, 'src', 'products.json'), 'utf8'));
+    } catch (e) {
+        productos = {};
+    }
+    const config = readPasillosConfig();
+    const configPorClave = {};
+    Object.keys(config).forEach((k) => { configPorClave[k.trim()] = config[k] || {}; });
+
+    const lista = [];
+    const porAlias = new Map(); // cualquier nombre normalizado -> entrada
+
+    Object.keys(productos).forEach((clave) => {
+        // Sólo cuentan los pasillos que existen en el catálogo (los que ve el
+        // trabajador). Las claves viejas de la configuración se ignoran.
+        const cfg = configPorClave[String(clave).trim()] || {};
+        if (cfg.enabled === false) return;
+
+        const base = String(clave).replace(/^\d+-/, '').replace(/-/g, ' ').toUpperCase();
+        const visible = String(cfg.name || base).replace(/\s+/g, ' ').trim().toUpperCase();
+        const normalVisible = normalizarEntrega(visible);
+        if (!normalVisible || porAlias.has(normalVisible)) return;
+
+        // El reporte puede venir con el nombre visible o con el nombre de la
+        // clave (el que manda el teléfono al enviar).
+        const entrada = {
+            nombre: visible,
+            alias: Array.from(new Set([normalVisible, normalizarEntrega(base)]))
+        };
+        lista.push(entrada);
+        entrada.alias.forEach((a) => porAlias.set(a, entrada));
+    });
+
+    return { lista, porAlias };
+}
+
+/** Personas distintas que entregaron cada pasillo en las carpetas del día. */
+function personasPorPasillo(dirs) {
+    const salida = new Map();
+
+    for (const dirDia of dirs) {
+        let entradas = [];
+        try { entradas = fs.readdirSync(dirDia, { withFileTypes: true }); } catch (e) { continue; }
+
+        for (const entrada of entradas) {
+            if (!entrada.isDirectory()) continue;
+            const nombrePasillo = entrada.name.replace(/\s+/g, ' ').trim().toUpperCase();
+            const clavePasillo = normalizarEntrega(nombrePasillo);
+            if (!clavePasillo) continue;
+
+            if (!salida.has(clavePasillo)) {
+                salida.set(clavePasillo, { nombre: nombrePasillo, personas: new Map() });
+            }
+            const grupo = salida.get(clavePasillo);
+            const carpeta = path.join(dirDia, entrada.name);
+
+            let archivos = [];
+            try { archivos = fs.readdirSync(carpeta, { withFileTypes: true }); } catch (e) { continue; }
+
+            for (const archivo of archivos) {
+                if (!archivo.isFile()) continue;
+                const ruta = path.join(carpeta, archivo.name);
+                let persona = '';
+                let fechaArchivo = '';
+
+                if (/\.json$/i.test(archivo.name)) {
+                    try {
+                        const data = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+                        persona = data.responsable || data.usuario || '';
+                        fechaArchivo = data.fecha || '';
+                    } catch (e) {
+                        persona = '';
+                    }
+                } else if (/\.xlsx$/i.test(archivo.name)) {
+                    // "PASILLO PASTA LUIS TOLOZA - SIN COMPAERO.xlsx"
+                    const tallo = archivo.name.replace(/\.xlsx$/i, '');
+                    const prefijo = new RegExp(
+                        '^' + entrada.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i');
+                    persona = tallo.replace(prefijo, '').split(/\s+-\s+/)[0] || tallo;
+                } else {
+                    continue;
+                }
+
+                try {
+                    const mtime = fs.statSync(ruta).mtime.toISOString();
+                    if (!fechaArchivo || new Date(mtime) > new Date(fechaArchivo)) fechaArchivo = mtime;
+                } catch (e) { /* sin fecha */ }
+
+                const normalPersona = normalizarEntrega(persona);
+                if (!normalPersona) continue;
+
+                if (!grupo.personas.has(normalPersona)) {
+                    grupo.personas.set(normalPersona, {
+                        nombre: String(persona).replace(/\s+/g, ' ').trim(),
+                        archivos: 0,
+                        ultima: fechaArchivo,
+                        ts: new Date(fechaArchivo).getTime() || 0
+                    });
+                }
+                const p = grupo.personas.get(normalPersona);
+                p.archivos += 1;
+                const ts = new Date(fechaArchivo).getTime() || 0;
+                if (ts >= p.ts) {
+                    p.ts = ts;
+                    p.ultima = fechaArchivo;
+                }
+            }
+        }
+    }
+    return salida;
+}
+
 const getContentType = (filePath) => {
     const extname = path.extname(filePath).toLowerCase();
     switch (extname) {
@@ -264,7 +447,7 @@ const NOMBRE_RE = /^[\p{L}\p{N} .,'_\-]{1,80}$/u;
 const STATE_FILES = new Set([
     'historial.json', 'cierres.json', 'pendientes.json',
     'pasillos_config.json', 'qrcodes.json', 'session_control.json',
-    'settings.json', 'feedback.json'
+    'settings.json', 'feedback.json', 'entregas_omitidos.json'
 ]);
 
 function sendJson(res, status, payload) {
@@ -736,7 +919,8 @@ const ADMIN_POST = new Set([
     '/api/pasillos-config',
     '/api/resolver-pendiente',
     '/api/cerrar-pasillo',
-    '/api/settings'
+    '/api/settings',
+    '/api/entregas/omitir'
 ]);
 
 const requestHandler = (req, res) => {
@@ -1057,6 +1241,123 @@ const requestHandler = (req, res) => {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(reportes));
+
+    } else if (req.method === 'GET' && pathname === '/api/entregas') {
+        try {
+            const params = new URLSearchParams(String(req.url).split('?')[1] || '');
+            const pedida = params.get('fecha') || '';
+            let fecha = new Date();
+            const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pedida);
+            if (coincidencia) {
+                const f = new Date(Number(coincidencia[1]), Number(coincidencia[2]) - 1, Number(coincidencia[3]));
+                if (!isNaN(f.getTime())) fecha = f;
+            }
+
+            const claveFecha = claveFechaLocal(fecha);
+            const omitidos = new Set((leerEntregasOmitidas()[claveFecha] || []).map(normalizarEntrega));
+            const esperados = pasillosEsperadosEntregas();
+            const observados = personasPorPasillo(carpetasDelDia(fecha));
+
+            const pasillos = [];
+            const agregar = (clave, nombre, grupo) => {
+                const personas = grupo ? Array.from(grupo.personas.values()) : [];
+                personas.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+                const entregados = personas.length;
+                const omitido = omitidos.has(clave);
+                let estado = 'pendiente';
+                if (omitido) estado = 'omitido';
+                else if (entregados >= META_CONTEOS_POR_PASILLO) estado = 'listo';
+                else if (entregados > 0) estado = 'en_curso';
+
+                pasillos.push({
+                    pasillo: nombre,
+                    estado: estado,
+                    meta: META_CONTEOS_POR_PASILLO,
+                    entregados: entregados,
+                    faltan: omitido ? 0 : Math.max(0, META_CONTEOS_POR_PASILLO - entregados),
+                    personas: personas.map((p) => ({
+                        nombre: p.nombre,
+                        archivos: p.archivos,
+                        ultima: p.ultima || ''
+                    }))
+                });
+            };
+
+            const usados = new Set();
+            for (const esperado of esperados.lista) {
+                let grupo = null;
+                for (const alias of esperado.alias) {
+                    if (observados.has(alias)) {
+                        grupo = observados.get(alias);
+                        usados.add(alias);
+                        break;
+                    }
+                }
+                agregar(normalizarEntrega(esperado.nombre), esperado.nombre, grupo);
+            }
+            for (const [clave, grupo] of observados) {
+                if (!usados.has(clave) && !esperados.porAlias.has(clave)) {
+                    agregar(clave, grupo.nombre, grupo);
+                }
+            }
+
+            const orden = { pendiente: 0, en_curso: 1, listo: 2, omitido: 3 };
+            pasillos.sort((a, b) => (orden[a.estado] - orden[b.estado]) ||
+                a.pasillo.localeCompare(b.pasillo, 'es'));
+
+            const resumen = {
+                total: pasillos.filter((p) => p.estado !== 'omitido').length,
+                listos: pasillos.filter((p) => p.estado === 'listo').length,
+                enCurso: pasillos.filter((p) => p.estado === 'en_curso').length,
+                pendientes: pasillos.filter((p) => p.estado === 'pendiente').length,
+                omitidos: pasillos.filter((p) => p.estado === 'omitido').length,
+                faltan: pasillos.reduce((n, p) => n + p.faltan, 0)
+            };
+
+            sendJson(res, 200, {
+                status: 'success',
+                fecha: claveFecha,
+                meta: META_CONTEOS_POR_PASILLO,
+                resumen: resumen,
+                pasillos: pasillos
+            });
+        } catch (e) {
+            sendJson(res, 500, { status: 'error', message: e.message });
+        }
+
+    } else if (req.method === 'POST' && pathname === '/api/entregas/omitir') {
+        readJsonBody(req, res, (data) => {
+            const fechaTxt = String(data.fecha || '');
+            const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fechaTxt);
+            const f = coincidencia
+                ? new Date(Number(coincidencia[1]), Number(coincidencia[2]) - 1, Number(coincidencia[3]))
+                : null;
+            if (!f || isNaN(f.getTime()) || claveFechaLocal(f) !== fechaTxt) {
+                sendJson(res, 400, { status: 'error', message: 'Fecha inválida' });
+                return;
+            }
+
+            const pasillo = normalizarEntrega(data.pasillo);
+            if (!pasillo) {
+                sendJson(res, 400, { status: 'error', message: 'Pasillo inválido' });
+                return;
+            }
+
+            try {
+                const todas = leerEntregasOmitidas();
+                const lista = new Set((todas[fechaTxt] || []).map(normalizarEntrega));
+                if (data.omitido) lista.add(pasillo);
+                else lista.delete(pasillo);
+
+                if (lista.size) todas[fechaTxt] = Array.from(lista);
+                else delete todas[fechaTxt];
+
+                guardarEntregasOmitidas(todas);
+                sendJson(res, 200, { status: 'success', omitidos: Array.from(lista) });
+            } catch (e) {
+                sendJson(res, 500, { status: 'error', message: 'No se pudo guardar el ajuste' });
+            }
+        });
 
     } else if (req.method === 'GET' && req.url.startsWith('/api/descargar-reporte/')) {
         let relativeFileName = '';
