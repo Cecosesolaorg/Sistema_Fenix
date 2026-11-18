@@ -584,7 +584,7 @@ function renderizarPasillosInicio() {
         // Pasillo normal — siempre va directo, sin modal de partes
         const defaultName = key.replace(/^\d+-/, '').replace(/-/g, ' ').toUpperCase();
         const displayName = cfg.name || defaultName;
-        const icon = (typeof window.obtenerIconoPasillo === 'function') ? window.obtenerIconoPasillo(key) : 'fa-layer-group';
+        const icon = cfg.icon || ((typeof window.obtenerIconoPasillo === 'function') ? window.obtenerIconoPasillo(key, displayName) : 'fa-layer-group');
 
         const a = document.createElement('a');
         a.className = 'pasillo-btn';

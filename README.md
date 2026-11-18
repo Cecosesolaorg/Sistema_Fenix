@@ -226,6 +226,15 @@ el catálogo completo sin borrar nada.
   ese día no se contó). El pasillo pasa a **OMITIDO** y deja de sumar
   faltantes; se puede **Reactivar** cuando haga falta.
 
+### Iconos de los pasillos
+
+- Cada pasillo muestra un icono en el inicio, en el panel y en la pantalla de
+  conteo. El icono se elige solo según el nombre: pasta, café, pan, lácteos,
+  carnes, frutas, limpieza, perfumería, etc.
+- En **Pasillos**, el botón **Icono** abre un selector para cambiarlo a mano.
+  La elección se guarda en `registros/pasillos_config.json` y se comparte con
+  todos los equipos. **Automático** vuelve a elegirlo por el nombre.
+
 ## Seguridad
 
 Estado actual del proyecto:

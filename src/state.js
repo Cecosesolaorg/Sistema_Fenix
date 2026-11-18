@@ -14,7 +14,7 @@ if (window.ALL_PRODUCTS && window.ALL_PRODUCTS[pasilloId]) {
     document.title = `Fénix — ${displayAisleName}`;
 
     if (typeof window.obtenerIconoPasillo === 'function') {
-        const iconClass = window.obtenerIconoPasillo(pasilloId);
+        const iconClass = cfg.icon || window.obtenerIconoPasillo(pasilloId, displayAisleName);
         const iconEl = document.querySelector('.topbar-title h1 i.fa-solid');
         if (iconEl) {
             iconEl.className = 'fa-solid ' + iconClass;

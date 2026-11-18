@@ -1562,6 +1562,124 @@ function repararPasillosSoloLocales(claves, config) {
     });
 }
 
+// ─── ICONO DEL PASILLO (elección manual) ───────────────────────────────────
+const ICONOS_PASILLO = [
+    { clase: 'fa-layer-group', etiqueta: 'Genérico' },
+    { clase: 'fa-cubes', etiqueta: 'Surtido' },
+    { clase: 'fa-boxes-stacked', etiqueta: 'Depósito' },
+    { clase: 'fa-store', etiqueta: 'Tienda' },
+    { clase: 'fa-cart-shopping', etiqueta: 'Compras' },
+    { clase: 'fa-basket-shopping', etiqueta: 'Mercado' },
+    { clase: 'fa-bowl-rice', etiqueta: 'Pasta y granos' },
+    { clase: 'fa-mug-hot', etiqueta: 'Café' },
+    { clase: 'fa-bread-slice', etiqueta: 'Pan' },
+    { clase: 'fa-cookie', etiqueta: 'Galletas' },
+    { clase: 'fa-cake-candles', etiqueta: 'Tortas' },
+    { clase: 'fa-wheat-awn', etiqueta: 'Cereales' },
+    { clase: 'fa-cheese', etiqueta: 'Lácteos' },
+    { clase: 'fa-egg', etiqueta: 'Huevos' },
+    { clase: 'fa-drumstick-bite', etiqueta: 'Carnes' },
+    { clase: 'fa-fish', etiqueta: 'Pescado' },
+    { clase: 'fa-apple-whole', etiqueta: 'Frutas' },
+    { clase: 'fa-carrot', etiqueta: 'Verduras' },
+    { clase: 'fa-seedling', etiqueta: 'Granos' },
+    { clase: 'fa-bottle-droplet', etiqueta: 'Salsas' },
+    { clase: 'fa-jar', etiqueta: 'Envasados' },
+    { clase: 'fa-bottle-water', etiqueta: 'Aguas y jugos' },
+    { clase: 'fa-wine-bottle', etiqueta: 'Bebidas' },
+    { clase: 'fa-snowflake', etiqueta: 'Frío' },
+    { clase: 'fa-toilet-paper', etiqueta: 'Papel' },
+    { clase: 'fa-pump-soap', etiqueta: 'Limpieza' },
+    { clase: 'fa-spray-can-sparkles', etiqueta: 'Perfumería' },
+    { clase: 'fa-baby', etiqueta: 'Bebés' },
+    { clase: 'fa-paw', etiqueta: 'Mascotas' },
+    { clase: 'fa-capsules', etiqueta: 'Medicinas' },
+    { clase: 'fa-screwdriver-wrench', etiqueta: 'Ferretería' },
+    { clase: 'fa-lightbulb', etiqueta: 'Electricidad' },
+    { clase: 'fa-shirt', etiqueta: 'Ropa' },
+    { clase: 'fa-smoking', etiqueta: 'Tabaco' },
+    { clase: 'fa-puzzle-piece', etiqueta: 'Juguetes' },
+    { clase: 'fa-warehouse', etiqueta: 'Almacén' },
+    { clase: 'fa-stairs', etiqueta: 'Zona alta' },
+    { clase: 'fa-box-open', etiqueta: 'Cajas' },
+    { clase: 'fa-table-cells-large', etiqueta: 'Pared' },
+];
+
+window.elegirIconoPasillo = function (key) {
+    const config = getPasillosConfig();
+    const cfg = config[key] || {};
+    const defaultName = key.replace(/^\d+-/, '').replace(/-/g, ' ').toUpperCase();
+    const displayName = cfg.name || defaultName;
+    const iconoActual = cfg.icon || (typeof window.obtenerIconoPasillo === 'function'
+        ? window.obtenerIconoPasillo(key, displayName)
+        : 'fa-layer-group');
+
+    let overlay = document.getElementById('modal-icono-pasillo');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'modal-icono-pasillo';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px;';
+        overlay.onclick = function (e) { if (e.target === overlay) overlay.style.display = 'none'; };
+
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#1a1a2e;border:1px solid rgba(255,255,255,0.12);border-radius:18px;padding:22px;width:480px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 18px 50px rgba(0,0,0,0.6);';
+        card.innerHTML = `
+            <h3 style="margin:0 0 4px;color:#f0c040;font-size:1.05rem;text-transform:uppercase;">Icono del pasillo</h3>
+            <p id="modal-icono-nombre" style="margin:0 0 16px;color:#aaa;font-size:0.85rem;"></p>
+            <div id="modal-icono-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:10px;"></div>
+            <div style="display:flex;gap:10px;margin-top:18px;">
+                <button id="modal-icono-auto" style="flex:1;padding:11px;border-radius:10px;background:#333;color:#fff;border:none;font-weight:700;cursor:pointer;">Automático</button>
+                <button id="modal-icono-close" style="flex:1;padding:11px;border-radius:10px;background:#444;color:#fff;border:none;font-weight:700;cursor:pointer;">Cerrar</button>
+            </div>
+        `;
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+        card.querySelector('#modal-icono-close').onclick = function () { overlay.style.display = 'none'; };
+    }
+
+    overlay.querySelector('#modal-icono-nombre').textContent = displayName;
+
+    const guardar = function (icono) {
+        const nuevaConfig = getPasillosConfig();
+        nuevaConfig[key] = Object.assign({}, nuevaConfig[key] || {});
+        if (icono) nuevaConfig[key].icon = icono;
+        else delete nuevaConfig[key].icon;
+        savePasillosConfig(nuevaConfig);
+
+        const el = document.getElementById('icono-pasillo-' + key.replace(/\W/g, '_'));
+        if (el) {
+            const final = icono || (typeof window.obtenerIconoPasillo === 'function'
+                ? window.obtenerIconoPasillo(key, displayName)
+                : 'fa-layer-group');
+            el.className = 'fa-solid ' + final;
+        }
+        overlay.style.display = 'none';
+        mostrarToastSistema(icono ? '🎨 Icono actualizado.' : '🎨 Icono automático.');
+    };
+
+    const grid = overlay.querySelector('#modal-icono-grid');
+    grid.innerHTML = '';
+    ICONOS_PASILLO.forEach(function (item) {
+        const activo = item.clase === iconoActual;
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.title = item.etiqueta;
+        boton.setAttribute('aria-label', item.etiqueta);
+        boton.style.cssText = 'width:100%;aspect-ratio:1;border-radius:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.15rem;transition:all 0.15s;border:2px solid ' +
+            (activo ? '#f0c040' : 'rgba(255,255,255,0.12)') + ';background:' +
+            (activo ? 'rgba(240,192,64,0.16)' : 'rgba(255,255,255,0.05)') + ';color:' +
+            (activo ? '#f0c040' : '#ddd') + ';';
+        boton.innerHTML = '<i class="fa-solid ' + item.clase + '"></i>';
+        boton.onmouseover = function () { if (!activo) this.style.background = 'rgba(255,255,255,0.12)'; };
+        boton.onmouseout = function () { if (!activo) this.style.background = 'rgba(255,255,255,0.05)'; };
+        boton.onclick = function () { guardar(item.clase); };
+        grid.appendChild(boton);
+    });
+
+    overlay.querySelector('#modal-icono-auto').onclick = function () { guardar(''); };
+    overlay.style.display = 'flex';
+};
+
 function renderPasillosView() {
     const container = document.getElementById('pasillos-list-container');
     if (!container) return;
@@ -1591,6 +1709,9 @@ function renderPasillosView() {
         const baseProducts = window.ALL_PRODUCTS[key];
         const extraProducts = cfg.extraProducts || [];
         const allProducts = [...baseProducts, ...extraProducts];
+        const iconoPasillo = cfg.icon || (typeof window.obtenerIconoPasillo === 'function'
+            ? window.obtenerIconoPasillo(key, displayName)
+            : 'fa-layer-group');
 
         const card = document.createElement('div');
         card.className = 'glass';
@@ -1619,7 +1740,7 @@ function renderPasillosView() {
 
         headerDiv.innerHTML = `
                     <i class="fa-solid fa-chevron-right" id="${headerId}-chevron" style="transition: transform 0.2s; color: var(--text-muted); font-size: 0.8rem;"></i>
-                    <i class="fa-solid fa-layer-group" style="color:var(--primary-green);font-size:1.1rem;"></i>
+                    <i class="fa-solid ${esc(iconoPasillo)}" id="icono-pasillo-${key.replace(/\W/g, '_')}" style="color:var(--primary-green);font-size:1.1rem;"></i>
                     <span id="name-display-${key.replace(/\W/g, '_')}" style="font-size:1.05rem;font-weight:800;flex:1;">${esc(displayName)}</span>
                     <span style="font-size:0.78rem;background:rgba(103,58,183,0.1);color:#673ab7;padding:3px 10px;border-radius:20px;font-weight:600;">${allProducts.length} productos</span>
                     <span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;font-weight:700;${enabled ? 'background:rgba(46,204,113,0.15);color:#27ae60;' : 'background:rgba(231,76,60,0.15);color:#e74c3c;'}" id="badge-status-${key.replace(/\W/g, '_')}">
@@ -1631,6 +1752,9 @@ function renderPasillosView() {
         const actionsDiv = document.createElement('div');
         actionsDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;';
         let btnsHtml = `
+                    <button onclick="elegirIconoPasillo('${key}')" style="background:rgba(52,152,219,0.1);color:#2980b9;border:1px solid rgba(52,152,219,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
+                        <i class="fa-solid fa-icons"></i> Icono
+                    </button>
                     <button onclick="renombrarPasillo('${key}')" style="background:rgba(103,58,183,0.1);color:#673ab7;border:1px solid rgba(103,58,183,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
                         <i class="fa-solid fa-pen"></i> Renombrar Pasillo
                     </button>

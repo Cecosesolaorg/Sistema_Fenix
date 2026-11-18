@@ -395,6 +395,28 @@ avisa claramente que no se pudo guardar.
 
 ---
 
+### 16. Iconos propios para cada pasillo
+
+**Qué se cambió**
+
+- Los pasillos creados desde el panel ahora reciben un icono acorde a su
+  nombre. Antes se elegía por la clave técnica (`CUSTOM-...`) y todos caían en
+  el icono genérico.
+- El reconocimiento automático cubre más rubros: lácteos, carnes, pescado,
+  frutas, verduras, bebidas, perfumería, bebés, mascotas, ferretería,
+  medicinas, ropa, juguetes, tabaco, etc.
+- En **Pasillos** hay un botón **Icono** con un selector visual. La elección
+  se guarda en la configuración y se comparte entre equipos.
+- El botón **Automático** quita la elección manual y vuelve al icono por
+  nombre.
+
+**Cómo mejora**
+
+Cada pasillo se reconoce de un vistazo en el inicio y en el teléfono, sin
+depender del nombre técnico que genera el sistema.
+
+---
+
 ## Hallazgos corregidos
 
 | ID | Hallazgo | Estado |
