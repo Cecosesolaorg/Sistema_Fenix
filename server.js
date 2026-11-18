@@ -232,6 +232,23 @@ function pasillosEsperadosEntregas() {
         entrada.alias.forEach((a) => porAlias.set(a, entrada));
     });
 
+    // Pasillos personalizados que todavía no están en el catálogo (creados
+    // mientras el servidor estaba apagado) también cuentan como pendientes.
+    Object.keys(configPorClave).forEach((clave) => {
+        const cfg = configPorClave[clave];
+        if (!cfg || !cfg.isCustom) return;
+        const visible = String(cfg.name || clave).replace(/\s+/g, ' ').trim().toUpperCase();
+        const normalVisible = normalizarEntrega(visible);
+        if (!normalVisible || porAlias.has(normalVisible)) return;
+        const base = String(clave).replace(/^\d+-/, '').replace(/-/g, ' ');
+        const entrada = {
+            nombre: visible,
+            alias: Array.from(new Set([normalVisible, normalizarEntrega(base)]))
+        };
+        lista.push(entrada);
+        entrada.alias.forEach((a) => porAlias.set(a, entrada));
+    });
+
     return { lista, porAlias };
 }
 

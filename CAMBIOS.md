@@ -376,6 +376,25 @@ se ve de un vistazo cuántos inventarios faltan y qué pasillos ya están listos
 
 ---
 
+### 15. Pasillos creados que no aparecían en el inicio
+
+**Qué se cambió**
+
+- Al crear un pasillo, si el servidor no responde el panel avisa y **no** lo da
+  por creado. Antes lo mostraba como si existiera, pero sólo en ese navegador.
+- El inicio ahora muestra también los pasillos creados que están en la
+  configuración aunque todavía no estén en el catálogo del servidor.
+- Al abrir **Pasillos**, el admin vuelve a guardar en el servidor esos pasillos
+  que habían quedado sólo en su equipo, y avisa con un mensaje.
+- La vista **Entregas** cuenta esos pasillos personalizados como pendientes.
+
+**Cómo mejora**
+
+Un pasillo creado ya no queda «fantasma»: o se guarda de verdad, o el panel
+avisa claramente que no se pudo guardar.
+
+---
+
 ## Hallazgos corregidos
 
 | ID | Hallazgo | Estado |

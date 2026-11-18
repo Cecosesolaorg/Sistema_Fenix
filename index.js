@@ -507,6 +507,15 @@ function renderizarPasillosInicio() {
 
     const config = JSON.parse(localStorage.getItem('fenix_pasillos_config') || '{}');
 
+    // Los pasillos creados desde el panel que sólo están en la configuración
+    // (por ejemplo, si el servidor no estaba disponible al crearlos) también
+    // se muestran en el inicio, igual que en la vista Pasillos.
+    for (const clave in config) {
+        if (config[clave] && config[clave].isCustom && !window.ALL_PRODUCTS[clave]) {
+            window.ALL_PRODUCTS[clave] = [];
+        }
+    }
+
     // Claves que se deben combinar en una sola tarjeta (grupos)
     // Formato: { tarjetaKey: [key1, key2, ...] }
     const GRUPOS_COMBINADOS = {

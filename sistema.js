@@ -1443,11 +1443,18 @@ function getPasillosConfig() {
 
 function savePasillosConfig(config) {
     localStorage.setItem(PASILLOS_CONFIG_KEY, JSON.stringify(config));
-    fetch('/api/pasillos-config', {
+    // Devuelve una promesa con true/false para que quien lo necesite pueda
+    // saber si el servidor guardó el cambio.
+    return fetch('/api/pasillos-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
-    }).catch(err => console.error('Error sincronizando config global con servidor:', err));
+    }).then(function (res) {
+        return res.ok;
+    }).catch(function (err) {
+        console.error('Error sincronizando config global con servidor:', err);
+        return false;
+    });
 }
 
 window.agregarPasilloNuevo = function () {
@@ -1481,7 +1488,8 @@ window.agregarPasilloNuevo = function () {
         const safeName = nombre.toUpperCase();
         const id = 'CUSTOM-' + safeName.replace(/\s+/g, '-') + '-' + Date.now().toString().slice(-4);
 
-        // 1. Guardar en products.js via servidor
+        // 1. Guardar en el catálogo del servidor. Si esto falla, el pasillo no
+        // debe quedar como si existiera: sólo se vería en este equipo.
         try {
             const res = await fetch('/api/agregar-pasillo', {
                 method: 'POST',
@@ -1489,31 +1497,70 @@ window.agregarPasilloNuevo = function () {
                 body: JSON.stringify({ id, nombre: safeName, productos: [] })
             });
             const result = await res.json();
-            if (result.status === 'error') throw new Error(result.message);
+            if (!res.ok || result.status === 'error') {
+                throw new Error(result.message || ('Error ' + res.status));
+            }
         } catch (e) {
             if (typeof mostrarToastSistema === 'function') {
-                mostrarToastSistema('⚠️ No se pudo guardar en products.js: ' + e.message);
+                mostrarToastSistema('⚠️ No se pudo crear el pasillo: ' + e.message);
             }
+            return;
         }
 
         // 2. Registrar también en ALL_PRODUCTS para la sesión actual
         if (!window.ALL_PRODUCTS) window.ALL_PRODUCTS = {};
         window.ALL_PRODUCTS[id] = [];
 
-        // 3. Guardar config
+        // 3. Guardar config en este equipo y en el servidor
         const config = getPasillosConfig();
         config[id] = { name: safeName, isCustom: true, extraProducts: [], enabled: true };
-        savePasillosConfig(config);
+        const guardadoEnServidor = await savePasillosConfig(config);
 
         renderPasillosView();
         if (typeof mostrarToastSistema === 'function') {
-            mostrarToastSistema('✅ Pasillo "' + safeName + '" guardado en products.js');
+            mostrarToastSistema(guardadoEnServidor
+                ? '✅ Pasillo "' + safeName + '" creado.'
+                : '⚠️ Pasillo creado sólo en este equipo: revisá la conexión con el servidor.');
         }
     });
 
     // Enviar con Enter
     input.onkeydown = function (e) { if (e.key === 'Enter') newOk.click(); };
 };
+
+// Si un pasillo creado quedó sólo en este navegador (por ejemplo, porque el
+// servidor estaba apagado), al abrir el panel se vuelve a guardar en el
+// servidor para que aparezca en todos los equipos y en el inicio.
+const pasillosReparados = new Set();
+
+function repararPasillosSoloLocales(claves, config) {
+    if (!Array.isArray(claves) || claves.length === 0) return;
+    if (rolActualSistema() !== 'admin') return;
+
+    claves.forEach(function (k) {
+        if (pasillosReparados.has(k)) return;
+        pasillosReparados.add(k);
+
+        const cfg = config[k] || {};
+        const nombre = String(cfg.name || k).toUpperCase();
+
+        fetch('/api/agregar-pasillo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: k, nombre: nombre, productos: [] })
+        }).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return savePasillosConfig(config);
+        }).then(function () {
+            if (typeof mostrarToastSistema === 'function') {
+                mostrarToastSistema('🔧 Pasillo "' + nombre + '" guardado en el servidor.');
+            }
+        }).catch(function (e) {
+            pasillosReparados.delete(k);
+            console.error('No se pudo reparar el pasillo ' + k + ':', e.message);
+        });
+    });
+}
 
 function renderPasillosView() {
     const container = document.getElementById('pasillos-list-container');
@@ -1527,11 +1574,14 @@ function renderPasillosView() {
 
     const config = getPasillosConfig();
 
+    const soloEnEsteEquipo = [];
     for (const k in config) {
         if (config[k] && config[k].isCustom && !window.ALL_PRODUCTS[k]) {
             window.ALL_PRODUCTS[k] = [];
+            soloEnEsteEquipo.push(k);
         }
     }
+    repararPasillosSoloLocales(soloEnEsteEquipo, config);
 
     for (const key in window.ALL_PRODUCTS) {
         const cfg = config[key] || {};
